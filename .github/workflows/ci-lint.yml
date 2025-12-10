@@ -1,0 +1,38 @@
+name: Lint and Static Analysis
+
+on:
+  workflow_call:  # This makes this workflow reusable
+    inputs:
+      example_input:
+        required: true
+        type: string
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Lint C code with clang-format (check if files are formatted correctly)
+      - name: Lint C code with clang-format
+        run: |
+          clang-format -n -i *.c *.h  # -n for dry-run, -i for auto-format
+
+      # Step 2: Static analysis with cppcheck (check for bugs and style issues)
+      - name: Run static analysis with cppcheck
+        run: |
+          cppcheck --enable=all --inconclusive --force --xml --xml-version=2 *.c *.h 2> cppcheck_report.xml
+          cat cppcheck_report.xml  # Show cppcheck results in the log
+
+      # Step 3: Run Valgrind for memory leak detection
+      - name: Run Valgrind (memory leak check)
+        run: |
+          valgrind --leak-check=full --error-exitcode=1 ./my_program
+
+      # Step 4: Run code complexity analysis with Lizard (detect complex functions)
+      - name: Run code complexity analysis with Lizard
+        run: |
+          lizard --max-cc 10 *.c *.h  # Adjust max cyclomatic complexity to your preference
+
+      # Step 5: Optional: Generate a Doxygen documentation report
+      - name: Generate documentation with Doxygen
+        run: |
+          doxygen Doxyfile  # Ensure you have a Doxyfile configuration for your project
