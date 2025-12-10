@@ -1,5 +1,7 @@
 # Prerequisites
 *.d
+*.code-workspace
+*.json
 
 # Object files
 *.o
