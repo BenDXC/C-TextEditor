@@ -25,13 +25,13 @@ void die(const char *s)
 }
 void disableRawMode()
 {
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios);
 }
 void enableRawMode()
 {
-  tcgetattr(STDIN_FILENO, &orig_termios);
+  tcgetattr(STDIN_FILENO, &E.orig_termios);
   atexit(disableRawMode);
-  struct termios raw = orig_termios;
+  struct termios raw = E.orig_termios;
   raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);          /* Disable echoing, canonical mode, signals, and extended input processing*/
   raw.c_iflag &= ~(IXON | ICRNL | BRKINT | INPCK | ISTRIP); /* Disable software flow control, carriage return to newline translation, and other input flags*/
   raw.c_cflag |= (CS8);                                     /* Set character size to 8 bits per byte*/
@@ -122,7 +122,7 @@ void editorRefreshScreen()
 {
   struct abuf ab = ABUF_INIT;
   abAppend(&ab, "\x1b[?25l", 6); /* Hide the cursor */
-  abAppend(&ab, "\xlb[2J", 4);   /* Clear the entire screen */
+  abAppend(&ab, "\x1b[2J", 4);   /* Clear the entire screen */
   abAppend(&ab, "\x1b[H", 3);    /* Move the cursor to the top-left corner */
 
   editorDrawRows(&ab);
