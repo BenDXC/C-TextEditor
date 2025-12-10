@@ -9,65 +9,56 @@ on:
       - main
 
 jobs:
-  build:
+  lint-and-build:
     runs-on: ubuntu-latest  # Use Ubuntu as the runner
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    # Install dependencies (GCC, clang-format, cppcheck, valgrind, lizard, doxygen, cpplint)
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential clang-format cppcheck valgrind lizard doxygen cpplint lcov
+      # Cache dependencies (e.g., apt-get packages)
+      - name: Cache apt dependencies
+        uses: actions/cache@v2
+        with:
+          path: /tmp/apt
+          key: ${{ runner.os }}-apt-${{ hashFiles('**/main.c') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
 
-    # Lint C code with clang-format (check if files are formatted correctly)
-    - name: Lint C code with clang-format
-      run: |
-        clang-format -n -i *.c *.h  # -n for dry-run, -i for auto-format
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang-format cppcheck valgrind lizard doxygen cpplint lcov
 
-    # Static analysis with cppcheck (check for bugs and style issues)
-    - name: Run static analysis with cppcheck
-      run: |
-        cppcheck --enable=all --inconclusive --force --xml --xml-version=2 *.c *.h 2> cppcheck_report.xml
-        cat cppcheck_report.xml  # Show cppcheck results in the log
+      # Call reusable workflow for linting, code analysis, and formatting
+      - name: Run linting and static analysis
+        uses: ./.github/workflows/ci-lint.yml  # Reusable workflow call
 
-    # Run Valgrind for memory leak detection
-    - name: Run Valgrind (memory leak check)
-      run: |
-        valgrind --leak-check=full --error-exitcode=1 ./my_program
+      # Compile code with coverage flags
+      - name: Compile code with coverage flags
+        run: gcc -fprofile-arcs -ftest-coverage -o my_program main.c
 
-    # Run code complexity analysis with Lizard (detect complex functions)
-    - name: Run code complexity analysis with Lizard
-      run: |
-        lizard --max-cc 10 *.c *.h  # Adjust max cyclomatic complexity to your preference
+      # Run tests and generate coverage
+      - name: Run tests and generate coverage
+        run: |
+          ./run_tests  # Ensure your tests are instrumented for coverage
+          lcov --capture --directory . --output-file coverage.info
 
-    # Generate code coverage report with gcov
-    - name: Compile code with coverage flags
-      run: gcc -fprofile-arcs -ftest-coverage -o my_program main.c
+      - name: Upload code coverage report as artifact
+        uses: actions/upload-artifact@v2  # Upload coverage info as artifact
+        with:
+          name: coverage-report
+          path: coverage.info
 
-    - name: Run tests and generate coverage
-      run: |
-        ./run_tests  # Ensure your tests are instrumented for coverage
-        lcov --capture --directory . --output-file coverage.info
+      # Generate documentation with Doxygen
+      - name: Generate documentation with Doxygen
+        run: |
+          doxygen Doxyfile  # Ensure you have a Doxyfile configuration for your project
 
-    - name: Upload code coverage report as artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: coverage-report
-        path: coverage.info
+      # Run cpplint (style checking)
+      - name: Run cpplint for code style
+        run: |
+          cpplint --filter=-whitespace/line_length *.c *.h
 
-    # Generate documentation with Doxygen
-    - name: Generate documentation with Doxygen
-      run: |
-        doxygen Doxyfile  # Ensure you have a Doxyfile configuration for your project
-
-    # Run cpplint (style checking)
-    - name: Run cpplint for code style
-      run: |
-        cpplint --filter=-whitespace/line_length *.c *.h
-
-    # (Optional) Run unit tests if available
-    - name: Run unit tests (optional)
-      run: ./run_tests  # Adjust based on your test runner or framework
+      # (Optional) Run unit tests if available
+      - name: Run unit tests (optional)
+        run: ./run_tests  # Adjust based on your test runner or framework
