@@ -17,7 +17,7 @@ jobs:
 
       # Cache dependencies (e.g., apt-get packages)
       - name: Cache apt dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: /tmp/apt
           key: ${{ runner.os }}-apt-${{ hashFiles('**/main.c') }}
