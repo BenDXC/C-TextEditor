@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang-format cppcheck valgrind lizard doxygen cpplint lcov
+          sudo apt-get install -y build-essential clang-format cppcheck valgrind doxygen cpplint lcov
 
       # Call reusable workflow for linting, code analysis, and formatting
       - name: Run linting and static analysis
