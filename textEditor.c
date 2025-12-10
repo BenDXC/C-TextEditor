@@ -3,9 +3,10 @@
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
-// struct termios orig_termios;
+struct termios orig_termios;
+
 int main() {
-//   enableRawMode();
+  enableRawMode();
   char c;
   while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q') {
     if (iscntrl(c)) {
