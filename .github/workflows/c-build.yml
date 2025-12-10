@@ -17,7 +17,7 @@ jobs:
 
       # Cache dependencies (e.g., apt-get packages)
       - name: Cache apt dependencies
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: /tmp/apt
           key: ${{ runner.os }}-apt-${{ hashFiles('**/main.c') }}
@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang-format cppcheck valgrind lizard doxygen cpplint lcov
+          sudo apt-get install -y build-essential clang-format cppcheck valgrind doxygen cpplint lcov
 
       # Call reusable workflow for linting, code analysis, and formatting
       - name: Run linting and static analysis
@@ -44,7 +44,7 @@ jobs:
           lcov --capture --directory . --output-file coverage.info
 
       - name: Upload code coverage report as artifact
-        uses: actions/upload-artifact@v2  # Upload coverage info as artifact
+        uses: actions/upload-artifact@v4  # Upload coverage info as artifact
         with:
           name: coverage-report
           path: coverage.info
