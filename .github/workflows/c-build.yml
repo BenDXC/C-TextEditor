@@ -87,20 +87,17 @@ jobs:
         run: |
           # Get the latest tag (if any)
           LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
-          
-            # Extract current version from the latest tag
-            VERSION=$(echo $LATEST_TAG | sed 's/^v//')
-            MAJOR=$(echo $VERSION | cut -d. -f1)
-            MINOR=$(echo $VERSION | cut -d. -f2)
-            PATCH=$(echo $VERSION | cut -d. -f3)
+          # Extract current version from the latest tag
+          VERSION=$(echo $LATEST_TAG | sed 's/^v//')
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
 
-            # Increment the PATCH version (can also change MINOR or MAJOR as needed)
+           # Increment the PATCH version (can also change MINOR or MAJOR as needed)
             PATCH=$((PATCH + 1))
 
             # Form the new tag
             NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          fi
-
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
       # Step 4: Create and push the new tag
