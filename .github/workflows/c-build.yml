@@ -1,4 +1,4 @@
-name: C Build, Lint, Test, and Analyze
+name: C Project Build and Test
 
 on:
   push:
@@ -9,56 +9,67 @@ on:
       - main
 
 jobs:
-  lint-and-build:
-    runs-on: ubuntu-latest  # Use Ubuntu as the runner
+  build:
+    runs-on: ubuntu-latest # Run on Ubuntu runner
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Cache dependencies (e.g., apt-get packages)
-      - name: Cache apt dependencies
-        uses: actions/cache@v4
-        with:
-          path: /tmp/apt
-          key: ${{ runner.os }}-apt-${{ hashFiles('**/main.c') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-
-
-      - name: Install dependencies
+      # Step 2: Set up build tools
+      - name: Set up Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang-format cppcheck valgrind doxygen cpplint lcov
+          sudo apt-get install -y build-essential cmake clang cppcheck
 
-      # Call reusable workflow for linting, code analysis, and formatting
-      - name: Run linting and static analysis
-        uses: ./.github/workflows/ci-lint.yml  # Reusable workflow call
-
-      # Compile code with coverage flags
-      - name: Compile code with coverage flags
-        run: gcc -fprofile-arcs -ftest-coverage -o my_program main.c
-
-      # Run tests and generate coverage
-      - name: Run tests and generate coverage
+      # Step 3: Install dependencies (if any, e.g., for external libraries)
+      - name: Install dependencies
         run: |
-          ./run_tests  # Ensure your tests are instrumented for coverage
-          lcov --capture --directory . --output-file coverage.info
+          sudo apt-get install -y libssl-dev  
 
-      - name: Upload code coverage report as artifact
-        uses: actions/upload-artifact@v4  # Upload coverage info as artifact
-        with:
-          name: coverage-report
-          path: coverage.info
-
-      # Generate documentation with Doxygen
-      - name: Generate documentation with Doxygen
+      # Step 4: Run static analysis (Clang-Tidy, CppCheck)
+      - name: Run Clang-Tidy for static analysis
         run: |
-          doxygen Doxyfile  # Ensure you have a Doxyfile configuration for your project
+          clang-tidy $(find . -name "*.c") -- -I./include  # Adjust include path if needed
 
-      # Run cpplint (style checking)
-      - name: Run cpplint for code style
+      - name: Run Cppcheck for static analysis
         run: |
-          cpplint --filter=-whitespace/line_length *.c *.h
+          cppcheck --enable=all --inconclusive --force --quiet .
 
-      # (Optional) Run unit tests if available
-      - name: Run unit tests (optional)
-        run: ./run_tests  # Adjust based on your test runner or framework
+      # Step 5: Run pre-commit hooks (optional but recommended)
+      - name: Run pre-commit hooks
+        run: |
+          pip install pre-commit
+          pre-commit install  # Ensure hooks are set up
+          pre-commit run --all-files  # Run pre-commit hooks on all files
+
+      # Step 6: Compile the C project (using Makefile or CMake)
+      - name: Build with CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake ..
+          make textEditor.c
+
+      # Step 7: Run unit tests
+      - name: Run Unit Tests
+        run: |
+          cd build
+          make test # Assumes 'make test' runs the unit tests
+
+      # Step 8: Generate code coverage (optional)
+      - name: Generate code coverage (optional)
+        run: |
+          cd build
+          make coverage  # Assumes 'make coverage' generates the coverage reports
+
+          # Upload coverage report if desired
+          mkdir -p coverage
+          cp coverage/lcov-report.html coverage/
+
+      # Step 9: Post-build cleanup (optional)
+      - name: Cleanup (optional)
+        run: |
+          sudo apt-get clean
+          rm -rf build  # Clean up temporary build files

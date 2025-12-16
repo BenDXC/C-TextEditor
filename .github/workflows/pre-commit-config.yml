@@ -1,0 +1,46 @@
+# .pre-commit-config.yaml
+repos:
+  # Clang-format for code formatting
+  - repo: https://github.com/llvm/llvm-project
+    rev: clang-format-release/15.x
+    hooks:
+      - id: clang-format
+        files: \.(c|h)$
+        args:
+          - --style=Google
+
+  # Cppcheck for static analysis
+  - repo: https://github.com/danmar/cppcheck
+    rev: 2.7
+    hooks:
+      - id: cppcheck
+        files: \.(c|h)$
+        args:
+          - --enable=all
+          - --inconclusive
+          - --force
+
+  # Clang-Tidy for linting
+  - repo: https://github.com/llvm/llvm-project
+    rev: clang-tidy-release/15.x
+    hooks:
+      - id: clang-tidy
+        files: \.(c|h)$
+        args:
+          - --checks=*:clang-analyzer-*
+
+  # Cpplint for coding style checks
+  - repo: https://github.com/cpplint/cpplint
+    rev: v1.5.5
+    hooks:
+      - id: cpplint
+        files: \.(c|h)$
+        args:
+          - --filter=-whitespace/braces  # Customize this based on your needs
+
+  # Splint for security analysis
+  - repo: https://github.com/splint/splint
+    rev: master
+    hooks:
+      - id: splint
+        files: \.(c|h)$
