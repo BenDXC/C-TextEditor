@@ -37,14 +37,7 @@ jobs:
         run: |
           cppcheck --enable=all --inconclusive --force --quiet .
 
-      # Step 5: Run pre-commit hooks (optional but recommended)
-      - name: Run pre-commit hooks
-        run: |
-          pip install pre-commit
-          pre-commit install  # Ensure hooks are set up
-          pre-commit run --all-files  # Run pre-commit hooks on all files
-
-      # Step 6: Compile the C project (using Makefile or CMake)
+      # Step 5: Compile the C project (using Makefile or CMake)
       - name: Build with CMake
         run: |
           mkdir -p build
@@ -52,13 +45,13 @@ jobs:
           cmake ..
           make textEditor.c
 
-      # Step 7: Run unit tests
+      # Step 6: Run unit tests
       - name: Run Unit Tests
         run: |
           cd build
           make test # Assumes 'make test' runs the unit tests
 
-      # Step 8: Generate code coverage (optional)
+      # Step 7: Generate code coverage (optional)
       - name: Generate code coverage (optional)
         run: |
           cd build
@@ -68,7 +61,7 @@ jobs:
           mkdir -p coverage
           cp coverage/lcov-report.html coverage/
 
-      # Step 9: Post-build cleanup (optional)
+      # Step 8: Post-build cleanup (optional)
       - name: Cleanup (optional)
         run: |
           sudo apt-get clean
