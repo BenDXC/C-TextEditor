@@ -45,7 +45,7 @@ jobs:
       matrix:
         include:
           - language: c-cpp
-            build-mode: auto # Auto-detect build system and build
+            build-mode: autobuild # Auto-detect build system and build
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
