@@ -87,11 +87,7 @@ jobs:
         run: |
           # Get the latest tag (if any)
           LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
-
-          # If there is no previous tag, start with v1.0.0
-          if [ -z "$LATEST_TAG" ]; then
-            NEW_TAG="v1.0.0"
-          else
+          
             # Extract current version from the latest tag
             VERSION=$(echo $LATEST_TAG | sed 's/^v//')
             MAJOR=$(echo $VERSION | cut -d. -f1)
