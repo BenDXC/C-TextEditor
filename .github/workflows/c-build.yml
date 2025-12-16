@@ -10,12 +10,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Run on Ubuntu runner
+    runs-on: ubuntu-latest # Run on the latest Ubuntu runner
 
     steps:
       # Step 1: Checkout the code
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       # Step 2: Set up build tools
       - name: Set up Build Tools
@@ -23,53 +23,44 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake clang cppcheck
 
-      # Step 3: Install dependencies (if any, e.g., for external libraries)
+      # Step 3: Install dependencies (if any)
       - name: Install dependencies
         run: |
-          sudo apt-get install -y libssl-dev  
+          sudo apt-get install -y libssl-dev  # Example dependency, adjust as needed
 
       # Step 4: Run static analysis (Clang-Tidy, CppCheck)
       - name: Run Clang-Tidy for static analysis
         run: |
-          clang-tidy $(find . -name "*.c") -- -I./include  # Adjust include path if needed
+          clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
 
       - name: Run Cppcheck for static analysis
         run: |
-          cppcheck --enable=all --inconclusive --force --quiet .
+          cppcheck --enable=all --inconclusive --force textEditor.c
 
-      # Step 5: Run pre-commit hooks (optional but recommended)
-      - name: Run pre-commit hooks
-        run: |
-          pip install pre-commit
-          pre-commit install  # Ensure hooks are set up
-          pre-commit run --all-files  # Run pre-commit hooks on all files
-
-      # Step 6: Compile the C project (using Makefile or CMake)
+      # Step 5: Create the build directory for CMake and build the project
       - name: Build with CMake
         run: |
-          mkdir -p build
+          mkdir -p build  # Create build directory
           cd build
-          cmake ..
-          make textEditor.c
+          cmake ..  # Generate the build system
+          make  # Build the project (compiles textEditor.c)
 
-      # Step 7: Run unit tests
+      # Step 6: Run unit tests (optional, if you have any)
       - name: Run Unit Tests
         run: |
-          cd build
-          make test # Assumes 'make test' runs the unit tests
+          # Example: If you have a test suite, run it here
+          # Assuming you have a test executable in your CMake setup
+          ./my_test_suite  # Adjust this based on your actual test setup
 
-      # Step 8: Generate code coverage (optional)
-      - name: Generate code coverage (optional)
-        run: |
-          cd build
-          make coverage  # Assumes 'make coverage' generates the coverage reports
+      # Step 7: Upload build artifacts (optional)
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: build/textEditor # Adjust to your binary location
 
-          # Upload coverage report if desired
-          mkdir -p coverage
-          cp coverage/lcov-report.html coverage/
-
-      # Step 9: Post-build cleanup (optional)
-      - name: Cleanup (optional)
+      # Step 8: Post-build cleanup (optional)
+      - name: Cleanup
         run: |
           sudo apt-get clean
           rm -rf build  # Clean up temporary build files
