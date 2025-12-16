@@ -48,9 +48,6 @@ jobs:
       # Step 6: Run unit tests (optional, if you have any)
       - name: Run Unit Tests
         run: |
-          # Example: If you have a test suite, run it here
-          # Assuming you have a test executable in your CMake setup
-          ./my_test_suite  # Adjust this based on your actual test setup
 
       # Step 7: Upload build artifacts (optional)
       - name: Upload build artifacts
