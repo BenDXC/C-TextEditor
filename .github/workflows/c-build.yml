@@ -154,7 +154,7 @@ jobs:
                 "name": "Release $NEW_TAG",
                 "body": "$RELEASE_BODY"
               }
-              EOF
+            EOF
             )
     
             # Extract release ID
