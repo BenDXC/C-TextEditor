@@ -73,79 +73,88 @@ jobs:
     needs: build  # Ensure the release job runs after the build job
 
     steps:
-    # Step 1: Checkout the code again, fetch all tags
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Fetch all tags
+      # Step 1: Checkout the code again, fetch all tags
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags
 
-    # Step 2: Set up Git configuration for tagging
-    - name: Set up Git
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+      # Step 2: Checkout the main branch to avoid detached HEAD state
+      - name: Checkout the main branch
+        run: |
+          git checkout main  # Switch to the main branch (adjust if needed)
 
-    # Step 3: Get the last tag and increment it based on semver
-    - name: Get the latest tag and generate the next version
-      id: version
-      run: |
-        # Get the latest tag (if any)
-        LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
-        
-        if [ -z "$LATEST_TAG" ]; then
-          # If there are no tags, set to initial version 0.1.0
-          MAJOR=0
-          MINOR=1
-          PATCH=0
-        else
-          # Extract current version from the latest tag
-          VERSION=$(echo $LATEST_TAG | sed 's/^v//')
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
-          PATCH=$(echo $VERSION | cut -d. -f3)
-        
-          # Increment the PATCH version (can also change MINOR or MAJOR as needed)
-          PATCH=$((PATCH + 1))
-        fi
+      # Step 3: Set up Git configuration for tagging
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-        # Form the new tag
-        NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-        echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
+      # Step 4: Get the last tag and increment it based on semver
+      - name: Get the latest tag and generate the next version
+        id: version
+        run: |
+          # Get the latest tag (if any)
+          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # If there are no tags, set to initial version 0.1.0
+            MAJOR=0
+            MINOR=1
+            PATCH=0
+          else
+            # Extract current version from the latest tag
+            VERSION=$(echo $LATEST_TAG | sed 's/^v//')
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+          
+            # Increment the PATCH version (can also change MINOR or MAJOR as needed)
+            PATCH=$((PATCH + 1))
+          fi
 
-    # Step 4: Generate changelog using auto-changelog
-    - name: Generate changelog
-      run: |
-        npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
+          # Form the new tag
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-    # Step 5: Commit and push the changelog
-    - name: Commit and push changelog
-      run: |
-        git add CHANGELOG.md
-        git commit -m "chore: update changelog for $NEW_TAG"
-        git push
+      # Step 5: Generate changelog using auto-changelog
+      - name: Generate changelog
+        run: |
+          npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
 
-    # Step 6: Create and push the new tag
-    - name: Create and push tag
-      run: |
-        git tag $NEW_TAG
-        git push origin $NEW_TAG
+      # Step 6: Commit and push the changelog
+      - name: Commit and push changelog
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-    # Step 7: Read the changelog and create GitHub release
-    - name: Create GitHub release with changelog
-      run: |
-        CHANGELOG=$(cat CHANGELOG.md)  # Read the generated changelog file
-        RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
-        
-        # Create the release using the body with changelog content
-        curl -X POST \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          -d @- \
-          https://api.github.com/repos/${{ github.repository }}/releases \
-          <<EOF
-          {
-            "tag_name": "$NEW_TAG",
-            "name": "Release $NEW_TAG",
-            "body": "$RELEASE_BODY"
-          }
-          EOF
+          # Check if there are any changes to commit (i.e., changes in CHANGELOG.md)
+          git diff --exit-code CHANGELOG.md || git commit -am "chore: update changelog for $NEW_TAG"
+
+          # Push the changes (if there are any)
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+
+      # Step 7: Create and push the new tag
+      - name: Create and push tag
+        run: |
+          git tag $NEW_TAG
+          git push origin $NEW_TAG
+
+      # Step 8: Create GitHub release with changelog
+      - name: Create GitHub release with changelog
+        run: |
+          CHANGELOG=$(cat CHANGELOG.md)  # Read the generated changelog file
+          RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
+          
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d @- \
+            https://api.github.com/repos/${{ github.repository }}/releases \
+            <<EOF
+            {
+              "tag_name": "$NEW_TAG",
+              "name": "Release $NEW_TAG",
+              "body": "$RELEASE_BODY"
+            }
+            EOF
