@@ -46,6 +46,7 @@ struct editorConfig
   int screencols;
   int numrows;
   erow *row;
+  char *filename;
   struct termios orig_termios;
 };
 struct editorConfig E;
@@ -243,8 +244,11 @@ void editorAppendRow(char *s, size_t len)
   editorUpdateRow(&E.row[at]);
   E.numrows++;
 }
+/*** File I/O ***/
 void editorOpen(char *filename)
 {
+  free(E.filename);
+  E.filename = strdup(filename); /* Store the filename in the editor configuration */
   FILE *fp = fopen(filename, "r");
   if (!fp)
     die("fopen");
@@ -346,11 +350,37 @@ void editorDrawRows(struct abuf *ab)
       abAppend(ab, &E.row[filerow].chars[E.coloff], len);
     }
     abAppend(ab, "\x1b[K", 3);
-    if (y < E.screenrows - 1)
+    abAppend(ab, "\r\n", 2);
+  }
+}
+void editorDrawStatusBar(struct abuf *ab)
+{
+  abAppend(ab, "\x1b[7m", 4); /* Switch to inverted colors */
+  char status[80], rstatus[80];
+  /* Calculate the left-aligned status */
+  int len = snprintf(status, sizeof(status), "%.20s - %d lines",
+                     E.filename ? E.filename : "No file", E.numrows);
+  /* Calculate the right-aligned status */
+  int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d",
+                      E.cy + 1, E.numrows);
+  if (len > E.screencols)
+    len = E.screencols;
+  abAppend(ab, status, len);
+  while (len < E.screencols)
+  {
+    if (E.screencols - len == rlen)
     {
-      abAppend(ab, "\r\n", 2);
+      abAppend(ab, rstatus, rlen); 
+      break;
+    }
+    else
+    {
+      abAppend(ab, " ", 1); 
+      len++;
     }
   }
+  abAppend(ab, "\x1b[m", 3); /* Switch back to normal formatting */
+  abAppend(ab, "\r\n", 2); /* Move to the next line */
 }
 void editorRefreshScreen()
 {
@@ -360,6 +390,7 @@ void editorRefreshScreen()
   abAppend(&ab, "\x1b[H", 3);    /* Move the cursor to the top-left corner */
 
   editorDrawRows(&ab);
+  editorDrawStatusBar(&ab);
 
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1,
@@ -466,8 +497,10 @@ void initEditor()
   E.coloff = 0;
   E.numrows = 0;
   E.row = NULL;
+  E.filename = NULL;
   if (getWindowSize(&E.screenrows, &E.screencols) == -1)
     die("getWindowSize");
+    E.screenrows -= 2; // Leave space for status bar and message bar
 }
 int main(int argc, char *argv[])
 {
