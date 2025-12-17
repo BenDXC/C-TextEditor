@@ -26,19 +26,24 @@ jobs:
           shopt -s nocasematch
 
           # Function to add label if it doesn't already exist
-          add_label_if_missing() {
-            current_labels=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
-            if ! echo "$current_labels" | grep -q "$1"; then
-              echo "Labeling PR as '$1'"
-              curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                -d "{\"labels\":[\"$1\"]}" \
-                "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels"
-            else
-              echo "Label '$1' already exists, skipping."
-            fi
-          }
+            add_label_if_missing() {
+              # Get the current labels applied to the PR
+              current_labels=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
+            
+              # Check if the label already exists in the list of current labels
+              if echo "$current_labels" | grep -q -i "$1"; then
+                echo "Label '$1' already exists, skipping."
+              else
+                echo "Labeling PR as '$1'"
+                # Add the label to the PR
+                curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  -d "{\"labels\":[\"$1\"]}" \
+                  "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels"
+              fi
+            }
+
 
           # Label as feature if PR title/description contains any of 'feat', 'feature', 'enhance'
           if [[ "$pr_title" =~ \b(feat|feature|enhance)\b || "$pr_body" =~ \b(feat|feature|enhance)\b ]]; then
