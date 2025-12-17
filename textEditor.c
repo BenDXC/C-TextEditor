@@ -15,6 +15,7 @@
 /** Defines */
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define TEXTEDITOR_VERSION "0.0.1"
+#define TEXTEDITOR_TAB_STOP 8
 enum editorKey
 {
   ARROW_LEFT = 1000,
@@ -38,6 +39,7 @@ typedef struct erow
 struct editorConfig
 {
   int cx, cy;
+  int rx; 
   int rowoff;
   int coloff;
   int screenrows;
@@ -187,15 +189,43 @@ int getWindowSize(int *rows, int *cols)
   }
 }
 /*** Row Operations ***/
+int editorRowCxToRx(erow *row, int cx)
+{
+  int rx = 0;
+  int j;
+  for (j = 0; j < cx; j++)
+  {
+    if (row->chars[j] == '\t')
+      rx += (TEXTEDITOR_TAB_STOP - 1) - (rx % TEXTEDITOR_TAB_STOP);
+    rx++;
+  }
+return rx; /* Return the calculated render x position from chars index */
+}
 void editorUpdateRow(erow *row)
 {
-  free(row->render);
-  row->render = malloc(row->size + 1);
+  int tabs = 0;
   int j;
+  for (j = 0; j < row->size; j++)
+  {
+    if (row->chars[j] == '\t')
+      tabs++;
+  }
+  free(row->render);
+  row->render = malloc(row->size + tabs * (TEXTEDITOR_TAB_STOP - 1) + 1); /* Allocate memory for the rendered row */
+
   int idx = 0;
   for (j = 0; j < row->size; j++)
   {
-    row->render[idx++] = row->chars[j];
+    if (row->chars[j] == '\t')
+    {
+      row->render[idx++] = ' ';
+      while (idx % TEXTEDITOR_TAB_STOP != 0) // Insert spaces until the next tab stop
+        row->render[idx++] = ' ';
+    }
+    else
+    {
+      row->render[idx++] = row->chars[j];
+    }
   }
   row->render[idx] = '\0';
   row->rsize = idx;
@@ -254,6 +284,11 @@ void abFree(struct abuf *ab)
 /** Output */
 void editorScroll()
 {
+  E.rx = 0;
+  if (E.cy < E.numrows)
+  {
+    E.rx = editorRowCxToRx(&E.row[E.cy], E.cx); /* Calculate render x position from chars index */
+  }
   if (E.cy < E.rowoff)
   {
     E.rowoff = E.cy;
@@ -262,13 +297,13 @@ void editorScroll()
   {
     E.rowoff = E.cy - E.screenrows + 1;
   }
-  if (E.cx < E.coloff)
+  if (E.rx < E.coloff)
   {
-    E.coloff = E.cx;
+    E.coloff = E.rx;
   }
-  if (E.cx >= E.coloff + E.screencols)
+  if (E.rx >= E.coloff + E.screencols)
   {
-    E.coloff = E.cx - E.screencols + 1;
+    E.coloff = E.rx - E.screencols + 1;
   }
 }
 void editorDrawRows(struct abuf *ab)
@@ -328,7 +363,7 @@ void editorRefreshScreen()
 
   char buf[32];
   snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1,
-           (E.cx - E.coloff) + 1);
+           (E.rx - E.coloff) + 1);
   abAppend(&ab, buf, strlen(buf)); /* Move the cursor to its current position */
 
   abAppend(&ab, "\x1b[?25h", 6);      /* Show the cursor */
@@ -419,6 +454,7 @@ void initEditor()
 {
   E.cx = 0; // Initialize cursor x position
   E.cy = 0; // Initialize cursor y position
+  E.rx = 0; // Initialize render x position
   E.rowoff = 0;
   E.coloff = 0;
   E.numrows = 0;
