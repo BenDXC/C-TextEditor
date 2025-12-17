@@ -105,4 +105,4 @@ File I/O: Functions to open files and load their contents into the editor.
 
 # License
 
-This project is licensed under the MIT License.
+This project is licensed under the GPL 3.0
