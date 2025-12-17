@@ -1,0 +1,87 @@
+name: Label PRs Based on Title
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+jobs:
+  label-pr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up GitHub CLI
+        uses: cli/cli@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Label PR based on title and description (case-insensitive, multi-keyword)
+        run: |
+          pr_title=$(jq --raw-output .pull_request.title "$GITHUB_EVENT_PATH")
+          pr_body=$(jq --raw-output .pull_request.body "$GITHUB_EVENT_PATH")
+          
+          # Enable case-insensitive matching
+          shopt -s nocasematch
+
+          # Label as feature if PR title/description contains any of 'feat', 'feature', 'enhance'
+          if [[ "$pr_title" =~ "feat" || "$pr_title" =~ "feature" || "$pr_title" =~ "enhance" || "$pr_body" =~ "feat" || "$pr_body" =~ "feature" || "$pr_body" =~ "enhance" ]]; then
+            echo "Labeling PR as 'feature'"
+            gh pr edit "$GITHUB_REF" --add-label "feature"
+
+          # Label as bugfix if PR title/description contains any of 'fix', 'bug', 'issue'
+          elif [[ "$pr_title" =~ "fix" || "$pr_title" =~ "bug" || "$pr_title" =~ "issue" || "$pr_body" =~ "fix" || "$pr_body" =~ "bug" || "$pr_body" =~ "issue" ]]; then
+            echo "Labeling PR as 'bugfix'"
+            gh pr edit "$GITHUB_REF" --add-label "bugfix"
+
+          # Label as breaking-change if PR title/description contains 'BREAKING CHANGE'
+          elif [[ "$pr_title" =~ "BREAKING CHANGE" || "$pr_body" =~ "BREAKING CHANGE" ]]; then
+            echo "Labeling PR as 'breaking-change'"
+            gh pr edit "$GITHUB_REF" --add-label "breaking-change"
+
+          # Label as documentation if PR title/description contains 'docs', 'documentation'
+          elif [[ "$pr_title" =~ "docs" || "$pr_title" =~ "documentation" || "$pr_body" =~ "docs" || "$pr_body" =~ "documentation" ]]; then
+            echo "Labeling PR as 'documentation'"
+            gh pr edit "$GITHUB_REF" --add-label "documentation"
+
+          # Label as enhancement if PR title/description contains any of 'enhance', 'improvement'
+          elif [[ "$pr_title" =~ "enhance" || "$pr_title" =~ "improvement" || "$pr_body" =~ "enhance" || "$pr_body" =~ "improvement" ]]; then
+            echo "Labeling PR as 'enhancement'"
+            gh pr edit "$GITHUB_REF" --add-label "enhancement"
+
+          # Label as performance if PR title/description contains 'perf', 'performance'
+          elif [[ "$pr_title" =~ "perf" || "$pr_title" =~ "performance" || "$pr_body" =~ "perf" || "$pr_body" =~ "performance" ]]; then
+            echo "Labeling PR as 'performance'"
+            gh pr edit "$GITHUB_REF" --add-label "performance"
+
+          # Label as refactor if PR title/description contains 'refactor'
+          elif [[ "$pr_title" =~ "refactor" || "$pr_body" =~ "refactor" ]]; then
+            echo "Labeling PR as 'refactor'"
+            gh pr edit "$GITHUB_REF" --add-label "refactor"
+
+          # Label as ci/cd if PR title/description contains 'ci', 'cd'
+          elif [[ "$pr_title" =~ "ci" || "$pr_title" =~ "cd" || "$pr_body" =~ "ci" || "$pr_body" =~ "cd" ]]; then
+            echo "Labeling PR as 'ci/cd'"
+            gh pr edit "$GITHUB_REF" --add-label "ci/cd"
+
+          # Label as security if PR title/description contains 'security'
+          elif [[ "$pr_title" =~ "security" || "$pr_body" =~ "security" ]]; then
+            echo "Labeling PR as 'security'"
+            gh pr edit "$GITHUB_REF" --add-label "security"
+
+          # Label as test if PR title/description contains 'test', 'tests'
+          elif [[ "$pr_title" =~ "test" || "$pr_title" =~ "tests" || "$pr_body" =~ "test" || "$pr_body" =~ "tests" ]]; then
+            echo "Labeling PR as 'test'"
+            gh pr edit "$GITHUB_REF" --add-label "test"
+
+          # Default label (if no match)
+          else
+            echo "No specific labels found, defaulting to 'misc'"
+            gh pr edit "$GITHUB_REF" --add-label "misc"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
