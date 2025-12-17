@@ -92,87 +92,73 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: build  # Ensure this runs after the build job
+    needs: build # Ensure the release job runs after the build job
 
     steps:
-      # Step 1: Checkout the code and fetch all tags
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all tags
+    # Step 1: Checkout the code again, fetch all tags
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all tags
 
-      # Step 2: Ensure we're on the main branch
-      - name: Ensure on main branch
-        run: |
-          git checkout main
+    # Step 2: Set up Git configuration for tagging
+    - name: Set up Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
 
-      # Step 3: Get the latest tag and generate the next version
-      - name: Get the latest tag and generate the next version
-        id: version
-        run: |
-          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+    # Step 3: Get the last tag and increment it based on semver
+    - name: Get the latest tag and generate the next version
+      id: version
+      run: |
+        # Get the latest tag (if any)
+        LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+        
+        if [ -z "$LATEST_TAG" ]; then
+          # If there are no tags, set to initial version 0.1.0
+          MAJOR=0
+          MINOR=1
+          PATCH=0
+        else
+          # Extract current version from the latest tag
           VERSION=$(echo $LATEST_TAG | sed 's/^v//')
           MAJOR=$(echo $VERSION | cut -d. -f1)
           MINOR=$(echo $VERSION | cut -d. -f2)
           PATCH=$(echo $VERSION | cut -d. -f3)
-          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+        
+          # Increment the PATCH version (can also change MINOR or MAJOR as needed)
+          PATCH=$((PATCH + 1))
+        fi
 
-      # Step 4: Generate changelog using auto-changelog
-      - name: Generate changelog
-        run: |
-          npx auto-changelog --commit-limit false --unreleased --template ./templates/changelog.ejs --output "CHANGELOG.md"
+        # Form the new tag
+        NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+        echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-      # Step 5: Commit and push changelog if changes exist
-      - name: Commit and push changelog
-        run: |
-          git diff --exit-code CHANGELOG.md || git commit -am "chore: update changelog for $NEW_TAG"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+    # Step 4: Create and push the new tag
+    - name: Create and push tag
+      run: |
+        git tag $NEW_TAG
+        git push origin $NEW_TAG
 
-      # Step 6: List the build directory to verify binary existence
-      - name: List build directory contents
-        run: ls -al build/
+    # Step 5: Create GitHub release
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.NEW_TAG }}
+        release_name: Release ${{ env.NEW_TAG }}
+        body: |
+          Changelog for this release:
+          - Added new features.
+          - Fixed bugs.
+          - Improved documentation.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 7: Check the permissions of the textEditor binary
-      - name: Check permissions of textEditor binary
-        run: ls -l build/textEditor
-
-      # Step 8: Create GitHub release with changelog and attach binaries
-      - name: Create GitHub release with changelog and attach binaries
-        run: |
-          CHANGELOG=$(cat CHANGELOG.md)
-          RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
-
-          # Create the GitHub release
-          CREATE_RELEASE_RESPONSE=$(curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d "{\"tag_name\": \"$NEW_TAG\", \"name\": \"Release $NEW_TAG\", \"body\": \"$RELEASE_BODY\"}" \
-            https://api.github.com/repos/${{ github.repository }}/releases)
-
-          # Extract the release ID from the response
-          RELEASE_ID=$(echo $CREATE_RELEASE_RESPONSE | jq -r .id)
-
-          # Check if release ID was successfully extracted
-          if [ "$RELEASE_ID" == "null" ]; then
-            echo "Failed to create release or get release ID"
-            exit 1
-          fi
-
-          # Verify the build directory and binary exist
-          if [ ! -d "build" ]; then
-            echo "Build directory does not exist!"
-            exit 1
-          fi
-          
-          if [ ! -f "build/textEditor" ]; then
-            echo "Binary 'textEditor' does not exist in the build directory!"
-            exit 1
-          fi
-
-          # Upload the build artifact (binary)
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @build/textEditor \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=textEditor"
+    # Optionally, upload build artifacts (e.g., binaries) to the release
+    # - name: Upload release assets
+    #   uses: actions/upload-release-asset@v1
+    #   with:
+    #     upload_url: ${{ steps.release.outputs.upload_url }}
+    #     asset_path: ./path/to/your/asset.zip
+    #     asset_name: asset.zip
+    #     asset_content_type: application/zip
