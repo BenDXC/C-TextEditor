@@ -248,6 +248,26 @@ void editorAppendRow(char *s, size_t len)
   editorUpdateRow(&E.row[at]);
   E.numrows++;
 }
+void edutorRowInsertChar(erow *row, int at, int c)
+{
+  if (at < 0 || at > row->size)
+    at = row->size;
+  row->chars = realloc(row->chars, row->size + 2); /* Reallocate memory for the new character */
+  memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1); /* Shift characters to the right */
+  row->size++;
+  row->chars[at] = c; /* Insert the new character */
+  editorUpdateRow(row); /* Update the rendered version of the row */
+}
+/*** Editor Operations ***/
+void editorInsertChar(int c)
+{
+  if (E.cy == E.numrows)
+  {
+    editorAppendRow("", 0); /* Append a new row if the cursor is at the end */
+  }
+  edutorRowInsertChar(&E.row[E.cy], E.cx, c); /* Insert the character at the current cursor position */
+  E.cx++;                                       /* Move the cursor to the right */
+}
 /*** File I/O ***/
 void editorOpen(char *filename)
 {
@@ -508,6 +528,9 @@ void editorProcessKeypress()
   case ARROW_LEFT:
   case ARROW_RIGHT:
     editorMoveCursor(c);
+    break;
+  default:
+    editorInsertChar(c); 
     break;
   }
 }
