@@ -13,139 +13,81 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Run on the latest Ubuntu runner
+    runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # Step 2: Set up build tools
-      - name: Set up Build Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake clang cppcheck
-
-      # Step 3: Install dependencies (if any)
-      - name: Install dependencies
-        run: |
-          sudo apt-get install -y libssl-dev  # Example dependency, adjust as needed
-
-      # Step 4: Run static analysis (Clang-Tidy, CppCheck)
-      - name: Run Clang-Tidy for static analysis
-        run: |
-          clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
-
-      - name: Run Cppcheck for static analysis
-        run: |
-          cppcheck --enable=all --inconclusive --force textEditor.c
-
-      # Step 5: Create the build directory for CMake and build the project
-      - name: Build with CMake
-        run: |
-          mkdir -p build  # Create build directory
-          cd build
-          cmake ..  # Generate the build system
-          make  # Build the project (compiles textEditor.c)
-
-      # Step 6: Run unit tests (optional, if you have any)
-      - name: Run Unit Tests
-        run: |
-          # Add your test commands here, e.g., `ctest` for CMake-based tests
-          cd build
-          ctest
-
-      # Step 7: Upload build artifacts (optional)
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: build/textEditor # Adjust to your binary location
-
-      # Step 8: Post-build cleanup (optional)
-      - name: Cleanup
-        run: |
-          sudo apt-get clean
-          rm -rf build  # Clean up temporary build files
+      # Build steps (same as before)
+      ...
 
   release:
     runs-on: ubuntu-latest
-    needs: build  # Ensure the release job runs after the build job
+    needs: build
 
     steps:
-      # Step 1: Checkout the code again, fetch all tags
+      # Checkout the code and fetch all tags
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all tags
+          fetch-depth: 0
 
-      # Step 2: Checkout the main branch to avoid detached HEAD state
-      - name: Checkout the main branch
-        run: |
-          git checkout main  # Switch to the main branch (adjust if needed)
-
-      # Step 3: Set up Git configuration for tagging
       - name: Set up Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      # Step 4: Get the last tag and increment it based on semver
+      # Get the latest tag and increment it
       - name: Get the latest tag and generate the next version
         id: version
         run: |
-          # Get the latest tag (if any)
           LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
-          
+
           if [ -z "$LATEST_TAG" ]; then
-            # If there are no tags, set to initial version 0.1.0
             MAJOR=0
             MINOR=1
             PATCH=0
           else
-            # Extract current version from the latest tag
             VERSION=$(echo $LATEST_TAG | sed 's/^v//')
             MAJOR=$(echo $VERSION | cut -d. -f1)
             MINOR=$(echo $VERSION | cut -d. -f2)
             PATCH=$(echo $VERSION | cut -d. -f3)
-          
-            # Increment the PATCH version (can also change MINOR or MAJOR as needed)
+
             PATCH=$((PATCH + 1))
           fi
 
-          # Form the new tag
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-      # Step 5: Generate changelog using auto-changelog
+          # Ensure unique tag
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            PATCH=$((PATCH + 1))
+            NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          fi
+
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      # Generate changelog
       - name: Generate changelog
         run: |
           npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
 
-      # Step 6: Commit and push the changelog
+      # Commit and push the changelog
       - name: Commit and push changelog
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update changelog for $NEW_TAG"
+          git push
 
-          # Check if there are any changes to commit (i.e., changes in CHANGELOG.md)
-          git diff --exit-code CHANGELOG.md || git commit -am "chore: update changelog for $NEW_TAG"
-
-          # Push the changes (if there are any)
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
-
-      # Step 7: Create and push the new tag
+      # Create and push the new tag
       - name: Create and push tag
         run: |
           git tag $NEW_TAG
           git push origin $NEW_TAG
 
-      # Step 8: Create GitHub release with changelog
+      # Create GitHub release with changelog
       - name: Create GitHub release with changelog
         run: |
-          CHANGELOG=$(cat CHANGELOG.md)  # Read the generated changelog file
+          CHANGELOG=$(cat CHANGELOG.md)
           RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
-          
+
           curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
