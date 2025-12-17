@@ -39,7 +39,7 @@ typedef struct erow
 struct editorConfig
 {
   int cx, cy;
-  int rx; 
+  int rx;
   int rowoff;
   int coloff;
   int screenrows;
@@ -199,7 +199,7 @@ int editorRowCxToRx(erow *row, int cx)
       rx += (TEXTEDITOR_TAB_STOP - 1) - (rx % TEXTEDITOR_TAB_STOP);
     rx++;
   }
-return rx; /* Return the calculated render x position from chars index */
+  return rx; /* Return the calculated render x position from chars index */
 }
 void editorUpdateRow(erow *row)
 {
@@ -429,17 +429,24 @@ void editorProcessKeypress()
     E.cx = 0;
     break;
   case END_KEY:
-    E.cx = E.screencols - 1;
+    if (E.cy < E.numrows)
+      E.cx = E.row[E.cy].size; /* Move cursor to the end of the current line */
     break;
 
   case PAGE_UP:
   case PAGE_DOWN:
-  {
-    int times = E.screenrows;
-    while (times--)
-      editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-  }
-  break;
+        {
+        if (c == PAGE_UP) {
+          E.cy = E.rowoff; // Move cursor to the top of the screen
+        } else if (c == PAGE_DOWN) {
+          E.cy = E.rowoff + E.screenrows - 1;// Move cursor to the bottom of the screen
+          if (E.cy > E.numrows) E.cy = E.numrows;
+        }
+        int times = E.screenrows;
+        while (times--)
+          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+      }
+      break;
 
   case ARROW_UP:
   case ARROW_DOWN:
