@@ -8,13 +8,12 @@ on:
     branches:
       - main
   schedule:
-    # This will run every Friday at midnight UTC
-    - cron: "0 0 * * 5" # Runs every Friday at midnight UTC
-  workflow_dispatch: # Allow manual triggering
+    - cron: "0 0 * * 5"  # Runs every Friday at midnight UTC
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Run on the latest Ubuntu runner
+    runs-on: ubuntu-latest  # Run on the latest Ubuntu runner
 
     steps:
       # Step 1: Checkout the code
@@ -52,6 +51,9 @@ jobs:
       # Step 6: Run unit tests (optional, if you have any)
       - name: Run Unit Tests
         run: |
+          # Add your test commands here, e.g., `ctest` for CMake-based tests
+          cd build
+          ctest
 
       # Step 7: Upload build artifacts (optional)
       - name: Upload build artifacts
@@ -68,7 +70,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: build # Ensure the release job runs after the build job
+    needs: build  # Ensure the release job runs after the build job
 
     steps:
     # Step 1: Checkout the code again, fetch all tags
@@ -110,31 +112,40 @@ jobs:
         NEW_TAG="v$MAJOR.$MINOR.$PATCH"
         echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-    # Step 4: Create and push the new tag
+    # Step 4: Generate changelog using auto-changelog
+    - name: Generate changelog
+      run: |
+        npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
+
+    # Step 5: Commit and push the changelog
+    - name: Commit and push changelog
+      run: |
+        git add CHANGELOG.md
+        git commit -m "chore: update changelog for $NEW_TAG"
+        git push
+
+    # Step 6: Create and push the new tag
     - name: Create and push tag
       run: |
         git tag $NEW_TAG
         git push origin $NEW_TAG
 
-    # Step 5: Create GitHub release
-    - name: Create GitHub release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ env.NEW_TAG }}
-        release_name: Release ${{ env.NEW_TAG }}
-        body: |
-          Changelog for this release:
-          - Added new features.
-          - Fixed bugs.
-          - Improved documentation.
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    # Optionally, upload build artifacts (e.g., binaries) to the release
-    # - name: Upload release assets
-    #   uses: actions/upload-release-asset@v1
-    #   with:
-    #     upload_url: ${{ steps.release.outputs.upload_url }}
-    #     asset_path: ./path/to/your/asset.zip
-    #     asset_name: asset.zip
-    #     asset_content_type: application/zip
+    # Step 7: Read the changelog and create GitHub release
+    - name: Create GitHub release with changelog
+      run: |
+        CHANGELOG=$(cat CHANGELOG.md)  # Read the generated changelog file
+        RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
+        
+        # Create the release using the body with changelog content
+        curl -X POST \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -d @- \
+          https://api.github.com/repos/${{ github.repository }}/releases \
+          <<EOF
+          {
+            "tag_name": "$NEW_TAG",
+            "name": "Release $NEW_TAG",
+            "body": "$RELEASE_BODY"
+          }
+          EOF
