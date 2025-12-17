@@ -121,7 +121,7 @@ jobs:
       # Step 4: Generate changelog using auto-changelog
       - name: Generate changelog
         run: |
-          npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
+          npx auto-changelog --commit-limit false --unreleased --template ./templates/changelog.ejs--output "CHANGELOG.md"
 
       # Step 5: Commit and push changelog if changes exist
       - name: Commit and push changelog
