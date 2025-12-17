@@ -143,21 +143,32 @@ jobs:
           CHANGELOG=$(cat CHANGELOG.md)
           RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
 
+          # Create the GitHub release
           CREATE_RELEASE_RESPONSE=$(curl -X POST \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            -d @- \
-            https://api.github.com/repos/${{ github.repository }}/releases <<EOF
-          {
-            "tag_name": "$NEW_TAG",
-            "name": "Release $NEW_TAG",
-            "body": "$RELEASE_BODY"
-          }
-          EOF
-          )
+            -d "{\"tag_name\": \"$NEW_TAG\", \"name\": \"Release $NEW_TAG\", \"body\": \"$RELEASE_BODY\"}" \
+            https://api.github.com/repos/${{ github.repository }}/releases)
 
           # Extract the release ID from the response
           RELEASE_ID=$(echo $CREATE_RELEASE_RESPONSE | jq -r .id)
+
+          # Check if release ID was successfully extracted
+          if [ "$RELEASE_ID" == "null" ]; then
+            echo "Failed to create release or get release ID"
+            exit 1
+          fi
+
+          # Verify the build directory and binary exist
+          if [ ! -d "build" ]; then
+            echo "Build directory does not exist!"
+            exit 1
+          fi
+          
+          if [ ! -f "build/textEditor" ]; then
+            echo "Binary 'textEditor' does not exist in the build directory!"
+            exit 1
+          fi
 
           # Upload the build artifact (binary)
           curl -X POST \
