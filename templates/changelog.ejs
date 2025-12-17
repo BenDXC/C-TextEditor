@@ -1,0 +1,25 @@
+<% 
+  // Get the previous and current tag names
+  const previousTag = versions[0]; // Previous tag
+  const currentTag = versions[1]; // Current tag
+
+  // Get the commits between the previous tag and the current tag
+  const commits = changelog.commits.filter(commit => commit.tag === currentTag);
+%>
+
+# Changelog for <%= currentTag %>
+
+### [<%= currentTag %>](https://github.com/<%= repository %>/releases/tag/<%= currentTag %>) - <%= changelog.date %>
+
+#### Commits between <%= previousTag %> and <%= currentTag %>:
+
+<% commits.forEach(function(commit) { %>
+- <%= commit.subject %> ([<%= commit.hash.substring(0, 7) %>](https://github.com/<%= repository %>/commit/<%= commit.hash %>))
+<% }); %>
+
+<% if (changelog.unreleased) { %>
+### Unreleased
+<% changelog.unreleased.forEach(function(commit) { %>
+- <%= commit.subject %> ([<%= commit.hash.substring(0, 7) %>](https://github.com/<%= repository %>/commit/<%= commit.hash %>))
+<% }); %>
+<% } %>
