@@ -31,7 +31,14 @@ jobs:
         run: |
           sudo apt-get install -y libssl-dev  # Example dependency, adjust as needed
 
-      # Step 4: Run static analysis (Clang-Tidy, CppCheck)
+      # Step 4: Verify build tools are installed
+      - name: Verify build tools
+        run: |
+          cmake --version
+          gcc --version
+          clang --version
+
+      # Step 5: Run static analysis (Clang-Tidy, CppCheck)
       - name: Run Clang-Tidy for static analysis
         run: |
           clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
@@ -40,26 +47,44 @@ jobs:
         run: |
           cppcheck --enable=all --inconclusive --force textEditor.c
 
-      # Step 5: Create the build directory for CMake and build the project
+      # Step 6: Build with CMake
       - name: Build with CMake
         run: |
           mkdir -p build  # Create build directory
           cd build
+          echo "Running cmake .."
           cmake ..  # Generate the build system
+          if [ $? -ne 0 ]; then
+            echo "CMake configuration failed!"
+            exit 1
+          fi
+          echo "Running make"
           make  # Build the project (compiles textEditor.c)
+          if [ $? -ne 0 ]; then
+            echo "Make failed!"
+            exit 1
+          fi
 
-      # Step 6: Run unit tests (optional, if you have any)
-      - name: Run Unit Tests
+      # Step 7: Debug output of the build directory contents after build
+      - name: List build directory contents
         run: |
+          echo "Listing contents of build directory:"
+          ls -al build/
 
-      # Step 7: Upload build artifacts (optional)
+      # Step 8: Search for the textEditor binary
+      - name: Search for textEditor binary
+        run: |
+          echo "Searching for textEditor binary in the build directory:"
+          find build/ -name "textEditor"
+
+      # Step 9: Upload build artifacts (optional)
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: build/textEditor # Adjust to your binary location
 
-      # Step 8: Post-build cleanup (optional)
+      # Step 10: Post-build cleanup (optional)
       - name: Cleanup
         run: |
           sudo apt-get clean
@@ -67,76 +92,73 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: build  # Ensure this runs after the build job
+    needs: build # Ensure the release job runs after the build job
 
     steps:
-      # Step 1: Checkout the code and fetch all tags
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all tags
+    # Step 1: Checkout the code again, fetch all tags
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all tags
 
-      # Step 2: Ensure we're on the main branch
-      - name: Ensure on main branch
-        run: |
-          git checkout main
+    # Step 2: Set up Git configuration for tagging
+    - name: Set up Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
 
-      # Step 3: Get the latest tag and generate the next version
-      - name: Get the latest tag and generate the next version
-        id: version
-        run: |
-          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+    # Step 3: Get the last tag and increment it based on semver
+    - name: Get the latest tag and generate the next version
+      id: version
+      run: |
+        # Get the latest tag (if any)
+        LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+        
+        if [ -z "$LATEST_TAG" ]; then
+          # If there are no tags, set to initial version 0.1.0
+          MAJOR=0
+          MINOR=1
+          PATCH=0
+        else
+          # Extract current version from the latest tag
           VERSION=$(echo $LATEST_TAG | sed 's/^v//')
           MAJOR=$(echo $VERSION | cut -d. -f1)
           MINOR=$(echo $VERSION | cut -d. -f2)
           PATCH=$(echo $VERSION | cut -d. -f3)
-          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+        
+          # Increment the PATCH version (can also change MINOR or MAJOR as needed)
+          PATCH=$((PATCH + 1))
+        fi
 
-      # Step 4: Generate changelog using auto-changelog
-      - name: Generate changelog
-        run: |
-          npx auto-changelog --commit-limit false --unreleased --template "keepachangelog" --output "CHANGELOG.md"
+        # Form the new tag
+        NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+        echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-      # Step 5: Commit and push changelog if changes exist
-      - name: Commit and push changelog
-        run: |
-          git diff --exit-code CHANGELOG.md || git commit -am "chore: update changelog for $NEW_TAG"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+    # Step 4: Create and push the new tag
+    - name: Create and push tag
+      run: |
+        git tag $NEW_TAG
+        git push origin $NEW_TAG
 
-      # Step 6: List the build directory to verify binary existence
-      - name: List build directory contents
-        run: ls -al build/
+    # Step 5: Create GitHub release
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.NEW_TAG }}
+        release_name: Release ${{ env.NEW_TAG }}
+        body: |
+          Changelog for this release:
+          - Added new features.
+          - Fixed bugs.
+          - Improved documentation.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 7: Check the permissions of the textEditor binary
-      - name: Check permissions of textEditor binary
-        run: ls -l build/textEditor
-
-      # Step 8: Create GitHub release with changelog and attach binaries
-      - name: Create GitHub release with changelog and attach binaries
-        run: |
-          CHANGELOG=$(cat CHANGELOG.md)
-          RELEASE_BODY="## Release Notes for $NEW_TAG\n\n$CHANGELOG"
-
-          CREATE_RELEASE_RESPONSE=$(curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -d @- \
-            https://api.github.com/repos/${{ github.repository }}/releases <<EOF
-          {
-            "tag_name": "$NEW_TAG",
-            "name": "Release $NEW_TAG",
-            "body": "$RELEASE_BODY"
-          }
-          EOF
-          )
-
-          # Extract the release ID from the response
-          RELEASE_ID=$(echo $CREATE_RELEASE_RESPONSE | jq -r .id)
-
-          # Upload the build artifact (binary)
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @build/textEditor \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=textEditor"
+    # Optionally, upload build artifacts (e.g., binaries) to the release
+    # - name: Upload release assets
+    #   uses: actions/upload-release-asset@v1
+    #   with:
+    #     upload_url: ${{ steps.release.outputs.upload_url }}
+    #     asset_path: ./path/to/your/asset.zip
+    #     asset_name: asset.zip
+    #     asset_content_type: application/zip
