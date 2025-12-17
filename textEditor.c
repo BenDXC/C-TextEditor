@@ -20,6 +20,7 @@
 #define TEXTEDITOR_TAB_STOP 8
 enum editorKey
 {
+  BACKSPACE = 127,
   ARROW_LEFT = 1000,
   ARROW_RIGHT,
   ARROW_UP,
@@ -252,10 +253,10 @@ void edutorRowInsertChar(erow *row, int at, int c)
 {
   if (at < 0 || at > row->size)
     at = row->size;
-  row->chars = realloc(row->chars, row->size + 2); /* Reallocate memory for the new character */
+  row->chars = realloc(row->chars, row->size + 2);                   /* Reallocate memory for the new character */
   memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1); /* Shift characters to the right */
   row->size++;
-  row->chars[at] = c; /* Insert the new character */
+  row->chars[at] = c;   /* Insert the new character */
   editorUpdateRow(row); /* Update the rendered version of the row */
 }
 /*** Editor Operations ***/
@@ -266,7 +267,7 @@ void editorInsertChar(int c)
     editorAppendRow("", 0); /* Append a new row if the cursor is at the end */
   }
   edutorRowInsertChar(&E.row[E.cy], E.cx, c); /* Insert the character at the current cursor position */
-  E.cx++;                                       /* Move the cursor to the right */
+  E.cx++;                                     /* Move the cursor to the right */
 }
 /*** File I/O ***/
 void editorOpen(char *filename)
@@ -394,17 +395,17 @@ void editorDrawStatusBar(struct abuf *ab)
   {
     if (E.screencols - len == rlen)
     {
-      abAppend(ab, rstatus, rlen); 
+      abAppend(ab, rstatus, rlen);
       break;
     }
     else
     {
-      abAppend(ab, " ", 1); 
+      abAppend(ab, " ", 1);
       len++;
     }
   }
   abAppend(ab, "\x1b[m", 3); /* Switch back to normal formatting */
-  abAppend(ab, "\r\n", 2); /* Move to the next line */
+  abAppend(ab, "\r\n", 2);   /* Move to the next line */
 }
 void editorDrawMessageBar(struct abuf *ab)
 {
@@ -440,7 +441,7 @@ void editorRefreshScreen()
 void editorSetStatusMessage(const char *fmt, ...)
 {
   va_list ap;
-  va_start(ap, fmt); 
+  va_start(ap, fmt);
   vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap); /* Format the status message */
   va_end(ap);
   E.statusmsg_time = time(NULL); /* Record the time the status message was set */
@@ -494,6 +495,10 @@ void editorProcessKeypress()
   int c = editorReadKey();
   switch (c)
   {
+  case '\r':
+    /* Enter key pressed */
+    break;
+
   case CTRL_KEY('q'):
     write(STDOUT_FILENO, "\x1b[2J", 4); /* Clear the entire screen */
     write(STDOUT_FILENO, "\x1b[H", 3);  /* Move the cursor to the top-left corner */
@@ -508,20 +513,30 @@ void editorProcessKeypress()
       E.cx = E.row[E.cy].size; /* Move cursor to the end of the current line */
     break;
 
+  case BACKSPACE:
+  case CTRL_KEY('h'):
+  case DEL_KEY:
+    /* Handle backspace and delete */
+    break;
+
   case PAGE_UP:
   case PAGE_DOWN:
-        {
-        if (c == PAGE_UP) {
-          E.cy = E.rowoff; // Move cursor to the top of the screen
-        } else if (c == PAGE_DOWN) {
-          E.cy = E.rowoff + E.screenrows - 1;// Move cursor to the bottom of the screen
-          if (E.cy > E.numrows) E.cy = E.numrows;
-        }
-        int times = E.screenrows;
-        while (times--)
-          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-      }
-      break;
+  {
+    if (c == PAGE_UP)
+    {
+      E.cy = E.rowoff; // Move cursor to the top of the screen
+    }
+    else if (c == PAGE_DOWN)
+    {
+      E.cy = E.rowoff + E.screenrows - 1; // Move cursor to the bottom of the screen
+      if (E.cy > E.numrows)
+        E.cy = E.numrows;
+    }
+    int times = E.screenrows;
+    while (times--)
+      editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+  }
+  break;
 
   case ARROW_UP:
   case ARROW_DOWN:
@@ -529,8 +544,12 @@ void editorProcessKeypress()
   case ARROW_RIGHT:
     editorMoveCursor(c);
     break;
+  case CTRL_KEY('l'): /* Redraw screen */
+  case '\x1b':
+    /* Do nothing */
+    break;
   default:
-    editorInsertChar(c); 
+    editorInsertChar(c);
     break;
   }
 }
@@ -549,7 +568,7 @@ void initEditor()
   E.statusmsg_time = 0;
   if (getWindowSize(&E.screenrows, &E.screencols) == -1)
     die("getWindowSize");
-    E.screenrows -= 2; // Leave space for status bar and message bar
+  E.screenrows -= 2; // Leave space for status bar and message bar
 }
 int main(int argc, char *argv[])
 {
@@ -559,7 +578,7 @@ int main(int argc, char *argv[])
   {
     editorOpen(argv[1]);
   }
-  editorSetStatusMessage("HELP: Ctrl-Q = quit"); 
+  editorSetStatusMessage("HELP: Ctrl-Q = quit");
   while (1)
   {
     editorRefreshScreen();
