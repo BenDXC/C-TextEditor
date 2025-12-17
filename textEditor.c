@@ -5,6 +5,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -49,12 +50,15 @@ struct editorConfig
   int screencols;
   int numrows;
   erow *row;
+  int dirty;
   char *filename;
   char statusmsg[80];
   time_t statusmsg_time;
   struct termios orig_termios;
 };
 struct editorConfig E;
+/** Prototypes */
+void editorSetStatusMessage(const char *fmt, ...); /* Prototype for setting status messages */
 /** Terminal */
 void die(const char *s)
 {
@@ -248,6 +252,7 @@ void editorAppendRow(char *s, size_t len)
   E.row[at].render = NULL;
   editorUpdateRow(&E.row[at]);
   E.numrows++;
+  E.dirty++;
 }
 void edutorRowInsertChar(erow *row, int at, int c)
 {
@@ -256,8 +261,9 @@ void edutorRowInsertChar(erow *row, int at, int c)
   row->chars = realloc(row->chars, row->size + 2);                   /* Reallocate memory for the new character */
   memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1); /* Shift characters to the right */
   row->size++;
-  row->chars[at] = c;   /* Insert the new character */
-  editorUpdateRow(row); /* Update the rendered version of the row */
+  row->chars[at] = c; /* Insert the new character */
+  editorUpdateRow(row);
+  E.dirty++; /* Update the rendered version of the row */
 }
 /*** Editor Operations ***/
 void editorInsertChar(int c)
@@ -270,6 +276,26 @@ void editorInsertChar(int c)
   E.cx++;                                     /* Move the cursor to the right */
 }
 /*** File I/O ***/
+char *editorRowsToString(int *buflen)
+{
+  int totlen = 0;
+  int j;
+  for (j = 0; j < E.numrows; j++)
+  {
+    totlen += E.row[j].size + 1; /* +1 for the newline character */
+  }
+  *buflen = totlen;
+  char *buf = malloc(totlen);
+  char *p = buf;
+  for (j = 0; j < E.numrows; j++)
+  {
+    memcpy(p, E.row[j].chars, E.row[j].size);
+    p += E.row[j].size;
+    *p = '\n';
+    p++;
+  }
+  return buf; /* Return the concatenated string of all rows */
+}
 void editorOpen(char *filename)
 {
   free(E.filename);
@@ -289,6 +315,28 @@ void editorOpen(char *filename)
   }
   free(line);
   fclose(fp);
+}
+void editorSave()
+{
+  if (E.filename == NULL)
+    return; /* No filename specified, cannot save */
+  int len;
+  char *buf = editorRowsToString(&len); /* Get the string representation of all rows */
+  int fd = open(E.filename, O_RDWR | O_CREAT, 0644);
+  if (fd != -1)
+  {
+    ftruncate(fd, len);             /* Truncate the file to the new length */
+    if (write(fd, buf, len) == len) /* Write the buffer to the file */
+    {
+      close(fd);
+      free(buf);
+      editorSetStatusMessage("%d bytes written to disk", len); /* Set success status message */
+      return;
+    }
+    close(fd);
+  }
+  free(buf);
+  editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno)); /* Set error status message */
 }
 /*** Append Buffer ***/
 struct abuf
@@ -383,8 +431,9 @@ void editorDrawStatusBar(struct abuf *ab)
   abAppend(ab, "\x1b[7m", 4); /* Switch to inverted colors */
   char status[80], rstatus[80];
   /* Calculate the left-aligned status */
-  int len = snprintf(status, sizeof(status), "%.20s - %d lines",
-                     E.filename ? E.filename : "No file", E.numrows);
+  int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
+                     E.filename ? E.filename : "[No Name]", E.numrows,
+                     E.dirty ? "(modified)" : "");
   /* Calculate the right-aligned status */
   int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d",
                       E.cy + 1, E.numrows);
@@ -504,7 +553,9 @@ void editorProcessKeypress()
     write(STDOUT_FILENO, "\x1b[H", 3);  /* Move the cursor to the top-left corner */
     exit(0);
     break;
-
+  case CTRL_KEY('s'):
+    editorSave();
+    break;
   case HOME_KEY:
     E.cx = 0;
     break;
@@ -563,6 +614,7 @@ void initEditor()
   E.coloff = 0;
   E.numrows = 0;
   E.row = NULL;
+  E.dirty = 0;
   E.filename = NULL;
   E.statusmsg[0] = '\0';
   E.statusmsg_time = 0;
@@ -578,7 +630,7 @@ int main(int argc, char *argv[])
   {
     editorOpen(argv[1]);
   }
-  editorSetStatusMessage("HELP: Ctrl-Q = quit");
+  editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit");
   while (1)
   {
     editorRefreshScreen();
