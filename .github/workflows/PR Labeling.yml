@@ -15,30 +15,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install GitHub CLI
-        run: |
-          curl -fsSL https://cli.github.com/packages/githubcli-archive.key | sudo tee /etc/apt/trusted.gpg.d/githubcli.asc > /dev/null
-          sudo apt-add-repository https://cli.github.com/packages
-          sudo apt-get update
-          sudo apt-get install gh
-
-      - name: Authenticate GitHub CLI
-        run: gh auth login --with-token <<< ${{ secrets.GITHUB_TOKEN }}
-
       - name: Label PR based on title and description (case-insensitive, multi-keyword)
         run: |
+          # Retrieve PR title and body
           pr_title=$(jq --raw-output .pull_request.title "$GITHUB_EVENT_PATH")
           pr_body=$(jq --raw-output .pull_request.body "$GITHUB_EVENT_PATH")
-
+          pr_number=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+          
           # Enable case-insensitive matching
           shopt -s nocasematch
 
           # Function to add label if it doesn't already exist
           add_label_if_missing() {
-            current_labels=$(gh pr view "$GITHUB_REF" --json labels -q ".labels[].name")
+            current_labels=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
             if ! echo "$current_labels" | grep -q "$1"; then
               echo "Labeling PR as '$1'"
-              gh pr edit "$GITHUB_REF" --add-label "$1"
+              curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -d "{\"labels\":[\"$1\"]}" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels"
             else
               echo "Label '$1' already exists, skipping."
             fi
