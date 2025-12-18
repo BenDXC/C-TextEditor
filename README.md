@@ -103,6 +103,73 @@ Rendering: Functions to draw the text on the screen, manage the status bar, and 
 
 File I/O: Functions to open files and load their contents into the editor.
 
+# UML
+```mermaid
+classDiagram
+    direction TB
+
+    %% Main Data Structures
+    class EditorConfig {
+        +int cx
+        +int cy
+        +int rx
+        +int rowoff
+        +int coloff
+        +int screenrows
+        +int screencols
+        +int numrows
+        +erow* row
+        +int dirty
+        +char* filename
+        +char statusmsg[80]
+        +time_t statusmsg_time
+        +struct termios orig_termios
+        +void initEditor()
+        +void editorOpen(filename)
+        +void editorSave()
+        +void editorInsertChar(c)
+        +void editorRefreshScreen()
+        +void editorProcessKeypress()
+        +void editorScroll()
+        +void editorDrawRows(abuf)
+        +void editorDrawStatusBar(abuf)
+        +void editorDrawMessageBar(abuf)
+        +void editorSetStatusMessage(fmt, ...)
+        +void editorMoveCursor(key)
+    }
+
+    class erow {
+        +int size
+        +int rsize
+        +char* chars
+        +char* render
+        +void editorUpdateRow()
+        +void edutorRowInsertChar(int at, int c)
+        +int editorRowCxToRx(cx)
+    }
+
+    class abuf {
+        +char* b
+        +int len
+        +void abAppend(s, len)
+        +void abFree()
+    }
+
+    class Terminal {
+        +void enableRawMode()
+        +void disableRawMode()
+        +int editorReadKey()
+        +int getCursorPosition(rows, cols)
+        +int getWindowSize(rows, cols)
+        +void die(s)
+    }
+
+    %% Relationships
+    EditorConfig "1" -- "*" erow : contains
+    EditorConfig "1" -- "*" abuf : uses
+    EditorConfig "1" -- Terminal : interacts with
+```
+
 # License
 
 This project is licensed under the GPL 3.0
