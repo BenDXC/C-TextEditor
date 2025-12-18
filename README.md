@@ -103,71 +103,75 @@ Rendering: Functions to draw the text on the screen, manage the status bar, and 
 
 File I/O: Functions to open files and load their contents into the editor.
 
-# UML
+# Design
+## Data Structures
+
 ```mermaid
 classDiagram
-    direction TB
-
-    %% Main Data Structures
-    class EditorConfig {
-        +int cx
-        +int cy
-        +int rx
-        +int rowoff
-        +int coloff
-        +int screenrows
-        +int screencols
-        +int numrows
-        +erow* row
-        +int dirty
-        +char* filename
-        +char statusmsg[80]
-        +time_t statusmsg_time
-        +struct termios orig_termios
-        +void initEditor()
-        +void editorOpen(filename)
-        +void editorSave()
-        +void editorInsertChar(c)
-        +void editorRefreshScreen()
-        +void editorProcessKeypress()
-        +void editorScroll()
-        +void editorDrawRows(abuf)
-        +void editorDrawStatusBar(abuf)
-        +void editorDrawMessageBar(abuf)
-        +void editorSetStatusMessage(fmt, ...)
-        +void editorMoveCursor(key)
-    }
-
     class erow {
-        +int size
-        +int rsize
-        +char* chars
-        +char* render
-        +void editorUpdateRow()
-        +void edutorRowInsertChar(int at, int c)
-        +int editorRowCxToRx(cx)
+        int size
+        int rsize
+        char* chars
+        char* render
     }
-
+    class editorConfig {
+        int cx, cy
+        int rx
+        int rowoff
+        int coloff
+        int screenrows
+        int screencols
+        int numrows
+        erow* row
+        int dirty
+        char* filename
+        char statusmsg[80]
+        time_t statusmsg_time
+        struct termios orig_termios
+    }
     class abuf {
-        +char* b
-        +int len
-        +void abAppend(s, len)
-        +void abFree()
+        char* b
+        int len
     }
 
-    class Terminal {
-        +void enableRawMode()
-        +void disableRawMode()
-        +int editorReadKey()
-        +int getCursorPosition(rows, cols)
-        +int getWindowSize(rows, cols)
-        +void die(s)
-    }
+    editorConfig --> erow
+    editorConfig --> abuf
 
-    %% Relationships
-    EditorConfig "1" -- "*" erow : contains
-    EditorConfig "1" -- "*" abuf : uses
-    EditorConfig "1" -- Terminal : interacts with
+```
+## Flow/Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Editor as EditorConfig
+    participant Terminal
+    participant Row as erow
+    participant Buffer as abuf
+
+    User->>Editor: Press key
+    Editor->>Terminal: editorReadKey()
+    Terminal-->>Editor: key pressed
+
+    alt Key is character
+        Editor->>Editor: editorInsertChar(c)
+        Editor->>Row: edutorRowInsertChar(at, c)
+        Row-->>Editor: row updated
+        Editor->>Editor: editorScroll()
+    else Key is arrow/page/home/end
+        Editor->>Editor: editorMoveCursor(key)
+        Editor->>Editor: editorScroll()
+    else Key is Ctrl-S
+        Editor->>Editor: editorSave()
+    else Key is Ctrl-Q
+        Editor->>Terminal: clear screen & exit
+    end
+
+    Editor->>Buffer: abAppend() multiple times
+    Editor->>Row: editorDrawRows()
+    Editor->>Editor: editorDrawStatusBar()
+    Editor->>Editor: editorDrawMessageBar()
+    Buffer-->>Terminal: write to STDOUT
+    Terminal-->>User: screen updated
 ```
 
 # License
