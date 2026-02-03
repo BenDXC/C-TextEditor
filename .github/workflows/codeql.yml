@@ -38,7 +38,7 @@ jobs:
             build-essential \
             cmake \
             libssl-dev \
-            libcurl4-openssl-dev \
+            libcurl4-openssl-dev
 
       # Step 3: Initialize CodeQL tools
       - name: Initialize CodeQL
