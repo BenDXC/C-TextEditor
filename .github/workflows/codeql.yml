@@ -11,8 +11,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on:
-      ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
     permissions:
       security-events: write
       packages: read
@@ -36,11 +35,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \  # Essential build tools like gcc, g++, make
-            cmake \             # CMake build system
-            libssl-dev \       # SSL library (example, adjust as needed)
-            libcurl-dev \      # Curl library (example, adjust as needed)
-            # Add any other dependencies required by your project here
+            build-essential \
+            cmake \
+            libssl-dev \
+            libcurl-dev \
+            $( [ "${{ matrix.language }}" == "c-cpp" ] && echo "libcunit-dev" )
 
       # Step 3: Initialize CodeQL tools
       - name: Initialize CodeQL
@@ -66,8 +65,13 @@ jobs:
           # Ensure the build directory contains the compiled binaries or executables (e.g., textEditor)
           ls -al build
 
-      # Step 5: Perform CodeQL analysis
+      # Step 5: Clean up build directory (optional)
+      - name: Clean up build directory
+        run: |
+          rm -rf build
+
+      # Step 6: Perform CodeQL analysis
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:${{matrix.language}}"
+          category: "/language:${{ matrix.language }}"
