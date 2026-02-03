@@ -46,7 +46,7 @@ jobs:
       - name: Run Cppcheck for static analysis (entire source)
         run: |
           echo "Running CppCheck on the entire source"
-          cppcheck --enable=all --inconclusive --force ./src  # Adjust path if necessary
+          cppcheck --enable=all --inconclusive --force ./  # Adjust path if necessary
 
       # Step 6: Build with CMake
       - name: Build with CMake
