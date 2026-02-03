@@ -61,51 +61,44 @@ jobs:
             fi
           fi
 
+          # New tag based on version increments
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
 
-      # Step 4: Generate Changelog from v1.0.0 or the latest tag
+      # Step 4: Generate Changelog from the latest tag to the new tag
       - name: Generate Changelog
         run: |
-          # Define the starting tag for changelog
-          START_TAG="v1.0.0"  # Replace this with your specific starting tag, like v1.0.0
-
-          # Generate changelog from the starting tag to HEAD
-          echo "Generating changelog from $START_TAG to HEAD"
+          # Generate changelog from the latest tag to HEAD
+          echo "Generating changelog from $LATEST_TAG to $NEW_TAG"
           
-          # If there is no previous tag, fallback to v0.1.0
-          if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v1.0.0"
-          fi
-
-          # Generate the changelog including all commits (not just conventional ones)
-          git log $START_TAG..HEAD --oneline --pretty=format:'- %s' > changelog.md
+          # Generate the changelog including all commits
+          git log $LATEST_TAG..HEAD --oneline --pretty=format:'- %s' > changelog.md
           echo "Changelog for $NEW_TAG" >> changelog.md
           echo "New Version: $NEW_TAG" >> changelog.md
           echo "" >> changelog.md
           
           # Add a section for each commit
-          echo "Changes since $START_TAG:" >> changelog.md
+          echo "Changes since $LATEST_TAG:" >> changelog.md
           cat changelog.md
 
           # Save the changelog as a markdown file in the source directory
-          mv changelog.md ./changelog.md  # Adjust this if you want to place it in a specific folder (e.g., docs/)
+          mv changelog.md ./changelog.md
 
-      # Step 5: Commit and push changelog.md to the repository (MANDATORY)
+      # Step 5: Commit and push changelog.md to the repository
       - name: Commit and push changelog.md to the repository
         run: |
           git add changelog.md
           git commit -m "Update changelog for $NEW_TAG"
           git push origin main
 
-      # Step 6: Upload Changelog as Artifact (MANDATORY)
+      # Step 6: Upload Changelog as Artifact
       - name: Upload Changelog
         uses: actions/upload-artifact@v4
         with:
           name: changelog
           path: ./changelog.md
 
-      # Step 7: Create GitHub Release (MANDATORY)
+      # Step 7: Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
