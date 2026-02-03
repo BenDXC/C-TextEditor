@@ -1,62 +1,173 @@
-release:
-  runs-on: ubuntu-latest
-  needs: build
-  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+name: C Project Build and Test
 
-  steps:
-    # Step 1: Checkout the code again, fetch all tags
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Fetch all tags
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual triggering
 
-    # Step 2: Set up Git configuration for tagging
-    - name: Set up Git
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'  # Run on both push and pull request
 
-    # Step 3: Get the latest tag and generate the next version
-    - name: Get the latest tag and generate the next version
-      id: version
-      run: |
-        LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
-        if [ -z "$LATEST_TAG" ]; then
-          MAJOR=0
-          MINOR=1
-          PATCH=0
-        else
-          VERSION=$(echo $LATEST_TAG | sed 's/^v//')
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
-          PATCH=$(echo $VERSION | cut -d. -f3)
-          PATCH=$((PATCH + 1))
-        fi
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-        NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-        echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+      # Step 2: Set up build tools
+      - name: Set up Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake clang cppcheck
 
-    # Step 4: Create the changelog and update the release notes
-    - name: Generate Changelog
-      run: |
-        git log $LATEST_TAG..HEAD --oneline > changelog.md
-        echo "Changelog for $NEW_TAG" >> changelog.md
-        echo "New Version: $NEW_TAG" >> changelog.md
+      # Step 3: Install dependencies (if any)
+      - name: Install dependencies
+        run: |
+          sudo apt-get install -y libssl-dev  # Example dependency, adjust as needed
 
-    # Step 5: Create a new branch for the release
-    - name: Create release branch
-      run: |
-        git checkout -b release/$NEW_TAG
-        git add changelog.md
-        git commit -m "Update changelog for $NEW_TAG"
-        git push origin release/$NEW_TAG
+      # Step 4: Verify build tools are installed
+      - name: Verify build tools
+        run: |
+          cmake --version
+          gcc --version
+          clang --version
 
-    # Step 6: Create a pull request from the release branch to main
-    - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v4
-      with:
-        title: "Release $NEW_TAG"
-        body: "This is the release pull request for $NEW_TAG"
-        head: release/$NEW_TAG
-        base: main
-        token: ${{ secrets.GITHUB_TOKEN }}
+      # Step 5: Run static analysis (Clang-Tidy, CppCheck)
+      - name: Run Clang-Tidy for static analysis
+        run: |
+          clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
+
+      - name: Run Cppcheck for static analysis
+        run: |
+          cppcheck --enable=all --inconclusive --force textEditor.c
+
+      # Step 6: Build with CMake
+      - name: Build with CMake
+        run: |
+          mkdir -p build  # Create build directory
+          cd build
+          echo "Running cmake .."
+          cmake ..  # Generate the build system
+          if [ $? -ne 0 ]; then
+            echo "CMake configuration failed!"
+            exit 1
+          fi
+          echo "Running make"
+          make  # Build the project (compiles textEditor.c)
+          if [ $? -ne 0 ]; then
+            echo "Make failed!"
+            exit 1
+          fi
+
+      # Step 7: Debug output of the build directory contents after build
+      - name: List build directory contents
+        run: |
+          echo "Listing contents of build directory:"
+          ls -al build/
+
+      # Step 8: Search for the textEditor binary
+      - name: Search for textEditor binary
+        run: |
+          echo "Searching for textEditor binary in the build directory:"
+          find build/ -name "textEditor"
+
+      # Step 9: Upload build artifacts (optional)
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: build/textEditor # Adjust to your binary location
+
+      # Step 10: Post-build cleanup (optional)
+      - name: Cleanup
+        run: |
+          sudo apt-get clean
+          rm -rf build  # Clean up temporary build files
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      # Step 1: Checkout the code again, fetch all tags
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags
+
+      # Step 2: Set up Git configuration for tagging
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      # Step 3: Get the latest tag and generate the next version
+      - name: Get the latest tag and generate the next version
+        id: version
+        run: |
+          # Get the latest tag (if any)
+          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+          echo "Latest tag is $LATEST_TAG"
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # If there are no tags, set to initial version 0.1.0
+            MAJOR=0
+            MINOR=1
+            PATCH=0
+          else
+            # Extract current version from the latest tag
+            VERSION=$(echo $LATEST_TAG | sed 's/^v//')  # Remove the 'v' prefix
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+
+            # Increment the PATCH version by 1
+            PATCH=$((PATCH + 1))
+          fi
+
+          # Form the new tag
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      # Step 4: Generate Changelog and update release notes
+      - name: Generate Changelog
+        run: |
+          git log $LATEST_TAG..HEAD --oneline > changelog.md
+          echo "Changelog for $NEW_TAG" >> changelog.md
+          echo "New Version: $NEW_TAG" >> changelog.md
+
+      # Step 5: Create a new branch for the release
+      - name: Create release branch
+        run: |
+          git checkout -b release/$NEW_TAG
+          git add changelog.md
+          git commit -m "Update changelog for $NEW_TAG"
+          git push origin release/$NEW_TAG
+
+      # Step 6: Create a pull request from the release branch to main
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          title: "Release $NEW_TAG"
+          body: "This is the release pull request for $NEW_TAG"
+          head: release/$NEW_TAG
+          base: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 7: Create GitHub release with changelog in markdown
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.NEW_TAG }}
+          name: ${{ env.NEW_TAG }}
+          body: |
+            # Changelog for ${{ env.NEW_TAG }}
+            $(cat changelog.md)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
