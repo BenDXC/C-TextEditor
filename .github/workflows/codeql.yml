@@ -37,7 +37,8 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             cmake \
-            $( [ "${{ matrix.language }}" == "c-cpp" ] && echo "libcunit-dev" )
+            libssl-dev \
+            libcurl-dev
 
       # Step 3: Initialize CodeQL tools
       - name: Initialize CodeQL
