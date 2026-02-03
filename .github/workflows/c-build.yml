@@ -4,11 +4,15 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch: # Allow manual triggering
 
 jobs:
   build:
     runs-on: ubuntu-latest # Run on the latest Ubuntu runner
+    if: github.event_name == 'pull_request' # Run only on pull requests
 
     steps:
       # Step 1: Checkout the code
@@ -88,6 +92,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: build  # Ensure the release job runs after the build job
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only run on push to main
 
     steps:
       # Step 1: Checkout the code again, fetch all tags
@@ -102,7 +107,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      # Step 3: Get the last tag and increment it based on semver
+      # Step 3: Get the last tag and generate the next version
       - name: Get the latest tag and generate the next version
         id: version
         run: |
@@ -122,10 +127,16 @@ jobs:
             PATCH=$(echo $VERSION | cut -d. -f3)
 
             # Increment the version based on commit types
-            if [[ "$COMMITS" == *"feat"* ]]; then
-              MINOR=$((MINOR + 1))  # Increment MINOR for new features
+            COMMITS=$(git log $LATEST_TAG..HEAD --oneline)
+            
+            if [[ "$COMMITS" == *"BREAKING CHANGE"* ]]; then
+              MAJOR=$((MAJOR + 1))  # Major version bump for breaking changes
+              MINOR=0
+              PATCH=0
+            elif [[ "$COMMITS" == *"feat"* ]]; then
+              MINOR=$((MINOR + 1))  # Minor version bump for new features
             elif [[ "$COMMITS" == *"fix"* ]]; then
-              PATCH=$((PATCH + 1))  # Increment PATCH for bug fixes
+              PATCH=$((PATCH + 1))  # Patch version bump for bug fixes
             fi
           fi
 
@@ -133,7 +144,7 @@ jobs:
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
 
-      # Step 4: Get commit messages since the last tag and categorize them
+      # Step 4: Generate Changelog in markdown format
       - name: Generate Changelog
         id: changelog
         run: |
@@ -142,21 +153,22 @@ jobs:
 
           # If there are no commits, set the changelog to a default message
           if [ -z "$COMMITS" ]; then
-            echo "No new changes since the last release." > changelog.txt
+            echo "No new changes since the last release." > changelog.md
           else
-            # Format the changelog with commit messages, categorized by type
-            echo "### New Features" > changelog.txt
-            git log $LATEST_TAG..HEAD --grep='^feat' --oneline >> changelog.txt
+            # Format the changelog in markdown
+            echo "# Release $NEW_TAG" > changelog.md
+            echo "## New Features" >> changelog.md
+            git log $LATEST_TAG..HEAD --grep='^feat' --oneline | sed 's/^/ - /' >> changelog.md
 
-            echo "### Bug Fixes" >> changelog.txt
-            git log $LATEST_TAG..HEAD --grep='^fix' --oneline >> changelog.txt
+            echo "## Bug Fixes" >> changelog.md
+            git log $LATEST_TAG..HEAD --grep='^fix' --oneline | sed 's/^/ - /' >> changelog.md
 
-            echo "### Other Changes" >> changelog.txt
-            git log $LATEST_TAG..HEAD --grep='^(?!feat|fix)' --oneline >> changelog.txt
+            echo "## Other Changes" >> changelog.md
+            git log $LATEST_TAG..HEAD --grep='^(?!feat|fix)' --oneline | sed 's/^/ - /' >> changelog.md
           fi
 
           # Save the changelog file for later use
-          echo "::set-output name=changelog::$(cat changelog.txt)"
+          echo "::set-output name=changelog::$(cat changelog.md)"
 
       # Step 5: Create and push the new tag
       - name: Create and push tag
@@ -164,7 +176,7 @@ jobs:
           git tag $NEW_TAG
           git push origin $NEW_TAG
 
-      # Step 6: Create GitHub release
+      # Step 6: Create GitHub release with changelog in markdown
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
@@ -174,11 +186,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Optional: Upload release assets
+      # Optional: Upload release assets (if needed)
       # - name: Upload release assets
       #   uses: actions/upload-release-asset@v1
       #   with:
       #     upload_url: ${{ steps.release.outputs.upload_url }}
       #     asset_path: ./path/to/your/asset.zip
-      #     asset_name: asset.zip
+      #     asset_name: mybinary-v${{ env.NEW_TAG }}.zip
       #     asset_content_type: application/zip
