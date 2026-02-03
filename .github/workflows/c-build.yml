@@ -11,8 +11,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Run on the latest Ubuntu runner
-    if: github.event_name == 'pull_request' # Run only on pull requests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'  # Run on both push and pull request
 
     steps:
       # Step 1: Checkout the code
@@ -185,12 +185,3 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}  # Use dynamically generated changelog
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Optional: Upload release assets (if needed)
-      # - name: Upload release assets
-      #   uses: actions/upload-release-asset@v1
-      #   with:
-      #     upload_url: ${{ steps.release.outputs.upload_url }}
-      #     asset_path: ./path/to/your/asset.zip
-      #     asset_name: mybinary-v${{ env.NEW_TAG }}.zip
-      #     asset_content_type: application/zip
