@@ -75,7 +75,7 @@ jobs:
           
           # If there is no previous tag, fallback to v0.1.0
           if [ -z "$LATEST_TAG" ]; then
-            LATEST_TAG="v0.1.0"
+            LATEST_TAG="v1.0.0"
           fi
 
           # Generate the changelog including all commits (not just conventional ones)
