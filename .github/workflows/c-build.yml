@@ -38,13 +38,15 @@ jobs:
           clang --version
 
       # Step 5: Run static analysis (Clang-Tidy, CppCheck)
-      - name: Run Clang-Tidy for static analysis
+      - name: Run Clang-Tidy for static analysis (all C files)
         run: |
-          clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
+          echo "Running Clang-Tidy on all C files"
+          find . -name "*.c" -exec clang-tidy {} -- -I./include \;  # Adjust include path if necessary
 
-      - name: Run Cppcheck for static analysis
+      - name: Run Cppcheck for static analysis (entire source)
         run: |
-          cppcheck --enable=all --inconclusive --force textEditor.c
+          echo "Running CppCheck on the entire source"
+          cppcheck --enable=all --inconclusive --force ./src  # Adjust path if necessary
 
       # Step 6: Build with CMake
       - name: Build with CMake
@@ -81,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
-          path: build/textEditor # Adjust to your binary location
+          path: build/textEditor  # Adjust to your binary location
 
       # Step 10: Post-build cleanup (optional)
       - name: Cleanup
@@ -107,8 +109,8 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      # Step 3: Get the latest tag and generate the next version
-      - name: Get the latest tag and generate the next version
+      # Step 3: Get the latest tag and determine version bump
+      - name: Get the latest tag and determine version bump
         id: version
         run: |
           # Get the latest tag (if any)
@@ -121,46 +123,55 @@ jobs:
             MINOR=1
             PATCH=0
           else
-            # Extract current version from the latest tag
-            VERSION=$(echo $LATEST_TAG | sed 's/^v//')  # Remove the 'v' prefix
+            VERSION=$(echo $LATEST_TAG | sed 's/^v//')  # Remove 'v' prefix
             MAJOR=$(echo $VERSION | cut -d. -f1)
             MINOR=$(echo $VERSION | cut -d. -f2)
             PATCH=$(echo $VERSION | cut -d. -f3)
 
-            # Increment the PATCH version by 1
-            PATCH=$((PATCH + 1))
+            # Get commit messages to determine the bump type
+            COMMIT_MESSAGES=$(git log $LATEST_TAG..HEAD --oneline)
+
+            # Check for commit types and adjust versioning accordingly
+            if echo "$COMMIT_MESSAGES" | grep -q "BREAKING CHANGE"; then
+              # Major bump for breaking changes
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            elif echo "$COMMIT_MESSAGES" | grep -q "feat:"; then
+              # Minor bump for new features
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            elif echo "$COMMIT_MESSAGES" | grep -q "fix:"; then
+              # Patch bump for bug fixes
+              PATCH=$((PATCH + 1))
+            fi
           fi
 
-          # Form the new tag
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
 
-      # Step 4: Generate Changelog and update release notes
+      # Step 4: Generate Changelog
       - name: Generate Changelog
         run: |
-          git log $LATEST_TAG..HEAD --oneline > changelog.md
+          # Generate a changelog from the latest tag to the HEAD commit
+          echo "Generating changelog from $LATEST_TAG to HEAD"
+          
+          # Check if we have a previous tag, else use v0.1.0 as the base
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.1.0"
+          fi
+
+          # Generate changelog
+          git log $LATEST_TAG..HEAD --oneline --pretty=format:'- %s' > changelog.md
           echo "Changelog for $NEW_TAG" >> changelog.md
           echo "New Version: $NEW_TAG" >> changelog.md
+          echo "" >> changelog.md
 
-      # Step 5: Create a new branch for the release
-      - name: Create release branch
-        run: |
-          git checkout -b release/$NEW_TAG
-          git add changelog.md
-          git commit -m "Update changelog for $NEW_TAG"
-          git push origin release/$NEW_TAG
+          # Add a section for each commit
+          echo "Changes since $LATEST_TAG:" >> changelog.md
+          cat changelog.md
 
-      # Step 6: Create a pull request from the release branch to main
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
-        with:
-          title: "Release $NEW_TAG"
-          body: "This is the release pull request for $NEW_TAG"
-          head: release/$NEW_TAG
-          base: main
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      # Step 7: Create GitHub release with changelog in markdown
+      # Step 5: Create GitHub release with changelog in markdown
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
         with:
