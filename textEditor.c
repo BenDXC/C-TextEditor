@@ -15,6 +15,7 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include "editor.h"
 /** Defines */
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define TEXTEDITOR_VERSION "0.0.1"
@@ -33,6 +34,11 @@ enum editorKey
   END_KEY,
   DEL_KEY,
 };
+enum editorHighlight
+{
+  HL_NORMAL = 0,
+  HL_NUMBER
+};
 /** Data */
 typedef struct erow
 {
@@ -40,6 +46,7 @@ typedef struct erow
   int rsize;
   char *chars;
   char *render;
+  unsigned char *hl;
 } erow;
 struct editorConfig
 {
@@ -62,7 +69,6 @@ struct editorConfig E;
 void editorSetStatusMessage(const char *fmt, ...);               /* Prototype for setting status messages */
 void editorRefreshScreen();                                      /* Prototype for refreshing the screen */
 char *editorPrompt(char *prompt, void (*callback)(char *, int)); /* Prototype for prompting user input */
-
 /** Terminal */
 void die(const char *s)
 {
@@ -202,6 +208,30 @@ int getWindowSize(int *rows, int *cols)
     return 0;
   }
 }
+/*** Syntax Highlighting ***/
+void editorUpdateSyntax(erow *row)
+{
+  row->hl = realloc(row->hl, row->rsize);
+  memset(row->hl, HL_NORMAL, row->rsize);
+  int i;
+  for (i = 0; i < row->rsize; i++)
+  {
+    if (isdigit(row->render[i]))
+    {
+      row->hl[i] = HL_NUMBER;
+    }
+  }
+}
+int editorSyntaxToColor(int hl)
+{
+  switch (hl)
+  {
+  case HL_NUMBER:
+    return 31;
+  default:
+    return 37;
+  }
+}
 /*** Row Operations ***/
 int editorRowCxToRx(erow *row, int cx)
 {
@@ -234,20 +264,17 @@ void editorUpdateRow(erow *row)
   int tabs = 0;
   int j;
   for (j = 0; j < row->size; j++)
-  {
     if (row->chars[j] == '\t')
       tabs++;
-  }
   free(row->render);
-  row->render = malloc(row->size + tabs * (TEXTEDITOR_TAB_STOP - 1) + 1); /* Allocate memory for the rendered row */
-
+  row->render = malloc(row->size + tabs * (KILO_TAB_STOP - 1) + 1);
   int idx = 0;
   for (j = 0; j < row->size; j++)
   {
     if (row->chars[j] == '\t')
     {
       row->render[idx++] = ' ';
-      while (idx % TEXTEDITOR_TAB_STOP != 0) // Insert spaces until the next tab stop
+      while (idx % KILO_TAB_STOP != 0)
         row->render[idx++] = ' ';
     }
     else
@@ -257,6 +284,7 @@ void editorUpdateRow(erow *row)
   }
   row->render[idx] = '\0';
   row->rsize = idx;
+  editorUpdateSyntax(row);
 }
 void editorInsertRow(int at, char *s, size_t len)
 {
@@ -271,20 +299,7 @@ void editorInsertRow(int at, char *s, size_t len)
   E.row[at].chars[len] = '\0';
   E.row[at].rsize = 0;
   E.row[at].render = NULL;
-  editorUpdateRow(&E.row[at]);
-  E.numrows++;
-  E.dirty++;
-}
-void editorAppendRow(char *s, size_t len)
-{
-  E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
-  int at = E.numrows;
-  E.row[at].size = len;
-  E.row[at].chars = malloc(len + 1);
-  memcpy(E.row[at].chars, s, len);
-  E.row[at].chars[len] = '\0';
-  E.row[at].rsize = 0;
-  E.row[at].render = NULL;
+  E.row[at].hl = NULL;
   editorUpdateRow(&E.row[at]);
   E.numrows++;
   E.dirty++;
@@ -293,6 +308,7 @@ void editorFreeRow(erow *row)
 {
   free(row->render);
   free(row->chars);
+  free(row->hl);
 }
 void editorRowDelChar(erow *row, int at)
 {
@@ -594,12 +610,40 @@ void editorDrawRows(struct abuf *ab)
     }
     else
     {
-      int len = E.row[filerow].size - E.coloff;
+      int len = E.row[filerow].rsize - E.coloff;
       if (len < 0)
         len = 0;
       if (len > E.screencols)
         len = E.screencols;
-      abAppend(ab, &E.row[filerow].chars[E.coloff], len);
+      char *c = &E.row[filerow].render[E.coloff];
+      unsigned char *hl = &E.row[filerow].hl[E.coloff];
+      int current_color = -1;
+      int j;
+      for (j = 0; j < len; j++)
+      {
+        if (hl[j] == HL_NORMAL)
+        {
+          if (current_color != -1)
+          {
+            abAppend(ab, "\x1b[39m", 5);
+            current_color = -1;
+          }
+          abAppend(ab, &c[j], 1);
+        }
+        else
+        {
+          int color = editorSyntaxToColor(hl[j]);
+          if (color != current_color)
+          {
+            current_color = color;
+            char buf[16];
+            int clen = snprintf(buf, sizeof(buf), "\x1b[%dm", color);
+            abAppend(ab, buf, clen);
+          }
+          abAppend(ab, &c[j], 1);
+        }
+      }
+      abAppend(ab, "\x1b[39m", 5);
     }
     abAppend(ab, "\x1b[K", 3);
     abAppend(ab, "\r\n", 2);
