@@ -18,26 +18,32 @@ jobs:
       # Step 1: Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensure all tags are fetched
 
-      # Step 2: Set up build tools
+      # Step 2: Debug Git tags (ensure all tags are available)
+      - name: Debug Git Tags
+        run: git tag
+
+      # Step 3: Set up build tools
       - name: Set up Build Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake clang cppcheck
 
-      # Step 3: Install dependencies (if any)
+      # Step 4: Install dependencies (if any)
       - name: Install dependencies
         run: |
           sudo apt-get install -y libssl-dev  # Example dependency, adjust as needed
 
-      # Step 4: Verify build tools are installed
+      # Step 5: Verify build tools are installed
       - name: Verify build tools
         run: |
           cmake --version
           gcc --version
           clang --version
 
-      # Step 5: Run static analysis (Clang-Tidy, CppCheck)
+      # Step 6: Run static analysis (Clang-Tidy, CppCheck)
       - name: Run Clang-Tidy for static analysis
         run: |
           clang-tidy textEditor.c -- -I./include  # Adjust the include path if necessary
@@ -46,7 +52,7 @@ jobs:
         run: |
           cppcheck --enable=all --inconclusive --force textEditor.c
 
-      # Step 6: Build with CMake
+      # Step 7: Build with CMake
       - name: Build with CMake
         run: |
           mkdir -p build  # Create build directory
@@ -64,26 +70,26 @@ jobs:
             exit 1
           fi
 
-      # Step 7: Debug output of the build directory contents after build
+      # Step 8: Debug output of the build directory contents after build
       - name: List build directory contents
         run: |
           echo "Listing contents of build directory:"
           ls -al build/
 
-      # Step 8: Search for the textEditor binary
+      # Step 9: Search for the textEditor binary
       - name: Search for textEditor binary
         run: |
           echo "Searching for textEditor binary in the build directory:"
           find build/ -name "textEditor"
 
-      # Step 9: Upload build artifacts (optional)
+      # Step 10: Upload build artifacts (optional)
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: build/textEditor # Adjust to your binary location
 
-      # Step 10: Post-build cleanup (optional)
+      # Step 11: Post-build cleanup (optional)
       - name: Cleanup
         run: |
           sudo apt-get clean
@@ -99,20 +105,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all tags
+          fetch-depth: 0  # Ensure all tags are fetched
 
-      # Step 2: Set up Git configuration for tagging
+      # Step 2: Fetch all tags (important if fetch-depth doesn't pull all tags)
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      # Step 3: Set up Git configuration for tagging
       - name: Set up Git
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-      # Step 3: Get the last tag and generate the next version
+      # Step 4: Get the last tag and generate the next version
       - name: Get the latest tag and generate the next version
         id: version
         run: |
           # Get the latest tag (if any)
           LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+
+          echo "Latest tag found: $LATEST_TAG"
 
           if [ -z "$LATEST_TAG" ]; then
             # If there are no tags, set to initial version 0.1.0
@@ -143,32 +155,6 @@ jobs:
           # Form the new tag
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV  # Save the tag as an environment variable
-
-      # Step 4: Generate Changelog in markdown format
-      - name: Generate Changelog
-        id: changelog
-        run: |
-          # Get all commits since the last tag
-          COMMITS=$(git log $LATEST_TAG..HEAD --oneline)
-
-          # If there are no commits, set the changelog to a default message
-          if [ -z "$COMMITS" ]; then
-            echo "No new changes since the last release." > changelog.md
-          else
-            # Format the changelog in markdown
-            echo "# Release $NEW_TAG" > changelog.md
-            echo "## New Features" >> changelog.md
-            git log $LATEST_TAG..HEAD --grep='^feat' --oneline | sed 's/^/ - /' >> changelog.md
-
-            echo "## Bug Fixes" >> changelog.md
-            git log $LATEST_TAG..HEAD --grep='^fix' --oneline | sed 's/^/ - /' >> changelog.md
-
-            echo "## Other Changes" >> changelog.md
-            git log $LATEST_TAG..HEAD --grep='^(?!feat|fix)' --oneline | sed 's/^/ - /' >> changelog.md
-          fi
-
-          # Save the changelog file for later use
-          echo "::set-output name=changelog::$(cat changelog.md)"
 
       # Step 5: Create and push the new tag
       - name: Create and push tag
