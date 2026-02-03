@@ -80,10 +80,7 @@ jobs:
           # Add a section for each commit
           echo "Changes since $LATEST_TAG:" >> changelog.md
           cat changelog.md
-
-          # Save the changelog as a markdown file in the source directory
-          mv changelog.md ./changelog.md
-
+          
       # Step 5: Commit and push changelog.md to the repository
       - name: Commit and push changelog.md to the repository
         run: |
