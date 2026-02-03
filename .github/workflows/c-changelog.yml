@@ -1,0 +1,118 @@
+name: Generate Changelog and Create GitHub Release
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the main branch
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  generate-changelog-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all tags and history
+
+      # Step 2: Set up Git configuration for tagging
+      - name: Set up Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      # Step 3: Get the latest tag and determine version bump
+      - name: Get the latest tag and determine version bump
+        id: version
+        run: |
+          # Get the latest tag (if any)
+          LATEST_TAG=$(git tag --sort=-creatordate | head -n 1)
+          echo "Latest tag is $LATEST_TAG"
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # If there are no tags, set to initial version 0.1.0
+            MAJOR=0
+            MINOR=1
+            PATCH=0
+          else
+            VERSION=$(echo $LATEST_TAG | sed 's/^v//')  # Remove 'v' prefix
+            MAJOR=$(echo $VERSION | cut -d. -f1)
+            MINOR=$(echo $VERSION | cut -d. -f2)
+            PATCH=$(echo $VERSION | cut -d. -f3)
+
+            # Get commit messages to determine the bump type
+            COMMIT_MESSAGES=$(git log $LATEST_TAG..HEAD --oneline)
+
+            # Check for commit types and adjust versioning accordingly
+            if echo "$COMMIT_MESSAGES" | grep -q "BREAKING CHANGE"; then
+              # Major bump for breaking changes
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            elif echo "$COMMIT_MESSAGES" | grep -q "feat:"; then
+              # Minor bump for new features
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            elif echo "$COMMIT_MESSAGES" | grep -q "fix:"; then
+              # Patch bump for bug fixes
+              PATCH=$((PATCH + 1))
+            fi
+          fi
+
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      # Step 4: Generate Changelog from v1.0.0 or the latest tag
+      - name: Generate Changelog
+        run: |
+          # Define the starting tag for changelog
+          START_TAG="v1.0.0"  # Replace this with your specific starting tag, like v1.0.0
+
+          # Generate changelog from the starting tag to HEAD
+          echo "Generating changelog from $START_TAG to HEAD"
+          
+          # If there is no previous tag, fallback to v0.1.0
+          if [ -z "$LATEST_TAG" ]; then
+            LATEST_TAG="v0.1.0"
+          fi
+
+          # Generate the changelog including all commits (not just conventional ones)
+          git log $START_TAG..HEAD --oneline --pretty=format:'- %s' > changelog.md
+          echo "Changelog for $NEW_TAG" >> changelog.md
+          echo "New Version: $NEW_TAG" >> changelog.md
+          echo "" >> changelog.md
+          
+          # Add a section for each commit
+          echo "Changes since $START_TAG:" >> changelog.md
+          cat changelog.md
+
+          # Save the changelog as a markdown file in the source directory
+          mv changelog.md ./changelog.md  # Adjust this if you want to place it in a specific folder (e.g., docs/)
+
+      # Step 5: Commit and push changelog.md to the repository (MANDATORY)
+      - name: Commit and push changelog.md to the repository
+        run: |
+          git add changelog.md
+          git commit -m "Update changelog for $NEW_TAG"
+          git push origin main
+
+      # Step 6: Upload Changelog as Artifact (MANDATORY)
+      - name: Upload Changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: ./changelog.md
+
+      # Step 7: Create GitHub Release (MANDATORY)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.NEW_TAG }}
+          name: ${{ env.NEW_TAG }}
+          body: |
+            # Changelog for ${{ env.NEW_TAG }}
+            $(cat changelog.md)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
