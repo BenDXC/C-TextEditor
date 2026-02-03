@@ -28,7 +28,7 @@ jobs:
       # Step 3: Install dependencies (if any)
       - name: Install dependencies
         run: |
-          sudo apt-get install -y libssl-openssl-dev 
+          sudo apt-get install -y libssl-dev 
 
       # Step 4: Verify build tools are installed
       - name: Verify build tools
